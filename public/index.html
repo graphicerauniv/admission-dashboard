@@ -1,98 +1,278 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Admission Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GEU Admission Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
+:root{
+  --primary:#0f172a;--primary-light:#1e293b;--accent:#3b82f6;--accent-hover:#2563eb;
+  --accent-light:#dbeafe;--accent-subtle:#eff6ff;
+  --success:#10b981;--success-light:#d1fae5;--success-dark:#059669;
+  --warning:#f59e0b;--warning-light:#fef3c7;--warning-dark:#d97706;
+  --danger:#ef4444;--danger-light:#fee2e2;--danger-dark:#dc2626;
+  --info:#06b6d4;--info-light:#cffafe;
+  --purple:#8b5cf6;--purple-light:#ede9fe;--purple-dark:#7c3aed;
+  --pink:#ec4899;--pink-light:#fce7f3;--pink-dark:#db2777;
+  --bg:#f1f5f9;--surface:#ffffff;--border:#e2e8f0;--border-light:#f1f5f9;
+  --text:#0f172a;--text-secondary:#475569;--text-muted:#94a3b8;
+  --shadow-sm:0 1px 2px rgba(0,0,0,0.05);--shadow:0 1px 3px rgba(0,0,0,0.1),0 1px 2px rgba(0,0,0,0.06);
+  --shadow-md:0 4px 6px -1px rgba(0,0,0,0.1),0 2px 4px -2px rgba(0,0,0,0.1);
+  --shadow-lg:0 10px 15px -3px rgba(0,0,0,0.1),0 4px 6px -4px rgba(0,0,0,0.1);
+  --shadow-xl:0 20px 25px -5px rgba(0,0,0,0.1),0 8px 10px -6px rgba(0,0,0,0.1);
+  --radius:8px;--radius-lg:12px;--radius-xl:16px;
+}
 *{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:'Segoe UI',Arial,sans-serif;background:#f4f6fb;padding:30px;}
-.container{background:white;padding:30px;border-radius:12px;max-width:1200px;margin:auto;box-shadow:0 6px 24px rgba(0,0,0,0.1);}
-h2{margin-bottom:20px;color:#1a1a2e;}
-.controls{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:12px;margin-bottom:20px;}
-.controls label{font-weight:600;color:#333;}
-.controls input[type="file"]{padding:8px;border:1px solid #ccc;border-radius:6px;background:#fff;}
-.controls input[type="date"]{padding:8px 12px;border:1px solid #ccc;border-radius:6px;font-size:14px;}
-button{padding:10px 28px;background:#007bff;color:white;border:none;border-radius:6px;cursor:pointer;font-size:15px;font-weight:600;transition:background .2s;}
-button:hover{background:#0056b3;}
-.summary{display:flex;justify-content:center;gap:20px;margin:25px 0;flex-wrap:wrap;}
-.card{background:linear-gradient(135deg,#eef3ff,#dce6ff);padding:20px 30px;border-radius:10px;min-width:200px;text-align:center;cursor:pointer;transition:transform .15s,box-shadow .15s;border:2px solid transparent;}
-.card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.12);}
-.card.active{border-color:#007bff;background:linear-gradient(135deg,#d0dfff,#b8ccff);}
-.card h3{margin-bottom:6px;color:#333;font-size:16px;}
-.card .number{font-size:32px;font-weight:bold;color:#007bff;}
-.tabs{display:flex;gap:8px;margin:20px 0 10px;justify-content:center;flex-wrap:wrap;}
-.tab-btn{padding:8px 20px;border:2px solid #007bff;background:white;color:#007bff;border-radius:20px;cursor:pointer;font-weight:600;transition:all .2s;}
-.tab-btn.active,.tab-btn:hover{background:#007bff;color:white;}
-.search-bar{margin:10px 0 15px;text-align:center;}
-.search-bar input{padding:9px 16px;width:350px;max-width:90%;border:1px solid #ccc;border-radius:6px;font-size:14px;}
-.table-wrap{max-height:500px;overflow-y:auto;border:1px solid #e0e0e0;border-radius:8px;}
-table{width:100%;border-collapse:collapse;font-size:14px;}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);line-height:1.5;-webkit-font-smoothing:antialiased;}
+
+/* ─── Navbar ─── */
+.navbar{background:var(--primary);padding:0 24px;height:60px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;box-shadow:0 1px 3px rgba(0,0,0,0.3);}
+.nav-brand{display:flex;align-items:center;gap:10px;color:white;font-weight:700;font-size:17px;letter-spacing:-0.3px;}
+.nav-brand .logo-icon{width:34px;height:34px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;}
+.nav-links{display:flex;gap:2px;}
+.nav-link{padding:8px 18px;color:#94a3b8;font-size:14px;font-weight:500;border-radius:6px;cursor:pointer;transition:all .2s;border:none;background:none;text-decoration:none;}
+.nav-link:hover{color:#e2e8f0;background:rgba(255,255,255,0.08);}
+.nav-link.active{color:white;background:rgba(59,130,246,0.2);}
+.nav-right{display:flex;align-items:center;gap:12px;}
+.nav-user{display:flex;align-items:center;gap:8px;color:#e2e8f0;font-size:13px;font-weight:500;}
+.nav-avatar{width:32px;height:32px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:white;}
+.nav-role{padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;}
+.nav-role.role-admin{background:var(--danger);color:white;}
+.nav-role.role-user{background:var(--info);color:white;}
+.logout-btn{padding:6px 14px;background:rgba(239,68,68,0.15);color:#fca5a5;border:1px solid rgba(239,68,68,0.3);border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;}
+.logout-btn:hover{background:var(--danger);color:white;border-color:var(--danger);}
+
+/* ─── Main Layout ─── */
+.main-content{max-width:1400px;margin:0 auto;padding:24px;}
+
+/* ─── Section Cards ─── */
+.section-card{background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);box-shadow:var(--shadow);margin-bottom:20px;overflow:hidden;}
+.section-header{padding:16px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.section-title{font-size:15px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px;}
+.section-title .icon{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px;}
+.section-body{padding:20px 24px;}
+
+/* ─── Buttons ─── */
+button,.btn{padding:8px 18px;background:var(--accent);color:white;border:none;border-radius:var(--radius);cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;transition:all .15s;display:inline-flex;align-items:center;gap:6px;line-height:1.4;}
+button:hover,.btn:hover{background:var(--accent-hover);transform:translateY(-1px);box-shadow:var(--shadow-md);}
+button:active,.btn:active{transform:translateY(0);}
+.btn-success{background:var(--success);}
+.btn-success:hover{background:var(--success-dark);}
+.btn-warning{background:var(--warning);}
+.btn-warning:hover{background:var(--warning-dark);}
+.btn-danger{background:var(--danger);}
+.btn-danger:hover{background:var(--danger-dark);}
+.btn-purple{background:var(--purple);}
+.btn-purple:hover{background:var(--purple-dark);}
+.btn-pink{background:var(--pink);}
+.btn-pink:hover{background:var(--pink-dark);}
+.btn-outline{background:transparent;color:var(--accent);border:1.5px solid var(--accent);}
+.btn-outline:hover{background:var(--accent);color:white;}
+.btn-sm{padding:5px 12px;font-size:12px;border-radius:6px;}
+.btn-ghost{background:transparent;color:var(--text-secondary);box-shadow:none;}
+.btn-ghost:hover{background:var(--border-light);transform:none;box-shadow:none;}
+
+/* ─── Form Elements ─── */
+input[type="date"],input[type="text"],input[type="email"],input[type="password"],select{
+  padding:9px 14px;border:1.5px solid var(--border);border-radius:var(--radius);font-family:inherit;font-size:13px;
+  color:var(--text);background:var(--surface);transition:border .2s,box-shadow .2s;outline:none;
+}
+input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(59,130,246,0.12);}
+input[type="file"]{padding:7px 10px;border:1.5px dashed var(--border);border-radius:var(--radius);font-size:12px;background:var(--bg);cursor:pointer;}
+input[type="file"]:hover{border-color:var(--accent);}
+label{font-size:13px;font-weight:600;color:var(--text-secondary);}
+
+/* ─── Date Controls ─── */
+.controls{display:flex;flex-wrap:wrap;align-items:center;gap:12px;}
+.controls label{font-weight:600;color:var(--text-secondary);font-size:13px;}
+
+/* ─── Summary Cards ─── */
+.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:20px;}
+.card{background:var(--surface);border:1.5px solid var(--border);padding:20px 24px;border-radius:var(--radius-lg);text-align:center;cursor:pointer;transition:all .2s;position:relative;overflow:hidden;}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--accent);opacity:0;transition:opacity .2s;}
+.card:hover{border-color:var(--accent);box-shadow:var(--shadow-md);transform:translateY(-2px);}
+.card:hover::before{opacity:1;}
+.card.active{border-color:var(--accent);background:var(--accent-subtle);box-shadow:0 0 0 1px var(--accent);}
+.card.active::before{opacity:1;}
+.card.card-enquiry.active{border-color:var(--info);background:var(--info-light);--accent:var(--info);}
+.card.card-enquiry.active::before{background:var(--info);}
+.card.card-registration.active{border-color:var(--warning);background:var(--warning-light);--accent:var(--warning);}
+.card.card-registration.active::before{background:var(--warning);}
+.card.card-admission.active{border-color:var(--success);background:var(--success-light);--accent:var(--success);}
+.card.card-admission.active::before{background:var(--success);}
+.card h3{margin-bottom:4px;color:var(--text-secondary);font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;}
+.card .number{font-size:36px;font-weight:800;color:var(--text);letter-spacing:-1px;margin:4px 0;}
+.card small{color:var(--text-muted);font-size:11px;font-weight:500;}
+.card.card-enquiry .number{color:var(--info);}
+.card.card-registration .number{color:var(--warning-dark);}
+.card.card-admission .number{color:var(--success-dark);}
+
+/* ─── Tabs ─── */
+.tabs{display:flex;gap:4px;border-bottom:2px solid var(--border);padding-bottom:0;margin-bottom:16px;}
+.tab-btn{padding:10px 20px;border:none;background:transparent;color:var(--text-muted);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;border-radius:6px 6px 0 0;transition:all .15s;position:relative;margin-bottom:-2px;border-bottom:2px solid transparent;}
+.tab-btn:hover{color:var(--text);background:var(--bg);}
+.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent);background:transparent;}
+
+/* ─── Filters ─── */
+.filter-bar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:16px;padding:14px 18px;background:var(--bg);border-radius:var(--radius);border:1px solid var(--border);}
+.filter-bar select{min-width:180px;font-size:13px;}
+.filter-bar label{font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.3px;}
+.filter-group{display:flex;align-items:center;gap:6px;}
+
+/* ─── Search ─── */
+.search-bar{margin-bottom:16px;}
+.search-bar input{width:100%;padding:10px 16px;padding-left:38px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:13px;background:var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%2394a3b8' viewBox='0 0 16 16'%3E%3Cpath d='M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85zm-5.242.156a5 5 0 1 1 0-10 5 5 0 0 1 0 10z'/%3E%3C/svg%3E") no-repeat 12px center;}
+
+/* ─── Download Bar ─── */
+.download-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;}
+
+/* ─── Table ─── */
+.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);max-height:520px;overflow-y:auto;}
+table{width:100%;border-collapse:collapse;font-size:13px;}
 thead{position:sticky;top:0;z-index:1;}
-th{background:#007bff;color:white;padding:10px 12px;text-align:left;white-space:nowrap;}
-td{padding:9px 12px;border-bottom:1px solid #eee;white-space:nowrap;}
-tr:nth-child(even){background:#f8f9ff;}
-tr:hover{background:#e8edff;}
-.no-data{padding:40px;color:#999;font-size:16px;text-align:center;}
-.badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;color:white;}
-.badge-admitted{background:#28a745;}
-.badge-registered{background:#ffc107;color:#333;}
-.badge-enquired{background:#17a2b8;}
-.badge-withdrawn{background:#dc3545;}
-.print-btn{margin-left:10px;padding:10px 20px;background:#28a745;font-size:14px;}
-.print-btn:hover{background:#1e7e34;}
-.dl-btn{padding:10px 20px;background:#6f42c1;font-size:14px;margin-left:6px;}
-.dl-btn:hover{background:#59339d;}
-.dl-all-btn{padding:10px 20px;background:#e83e8c;font-size:14px;margin-left:6px;}
-.dl-all-btn:hover{background:#c7235a;}
-.upload-btn{padding:10px 20px;background:#fd7e14;font-size:14px;}
-.upload-btn:hover{background:#e8590c;}
-.download-bar{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:10px 0;}
-.filter-bar{display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap;margin:8px 0 12px;}
-.filter-bar select{padding:9px 14px;border:1px solid #ccc;border-radius:6px;font-size:14px;min-width:220px;background:#fff;cursor:pointer;}
-.filter-bar label{font-weight:600;color:#444;font-size:14px;}
-.db-status{background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;padding:12px 20px;margin-bottom:18px;display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;}
-.db-status .count{font-weight:700;color:#2e7d32;font-size:18px;}
-.db-status .label{color:#555;}
-.migrate-btn{padding:8px 16px;background:#ff9800;font-size:13px;}
-.migrate-btn:hover{background:#e68900;}
-.name-link{color:#007bff;cursor:pointer;text-decoration:underline;font-weight:700;}
-.name-link:hover{color:#0056b3;}
-.loading-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(255,255,255,0.85);z-index:200;justify-content:center;align-items:center;flex-direction:column;gap:16px;}
+th{background:var(--primary-light);color:#e2e8f0;padding:11px 14px;text-align:left;white-space:nowrap;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;}
+td{padding:10px 14px;border-bottom:1px solid var(--border-light);white-space:nowrap;font-size:13px;color:var(--text-secondary);}
+tr:hover{background:var(--accent-subtle);}
+tbody tr{transition:background .1s;}
+.no-data{padding:50px;color:var(--text-muted);font-size:15px;text-align:center;}
+
+/* ─── Badges ─── */
+.badge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;letter-spacing:0.3px;}
+.badge-admitted{background:var(--success-light);color:var(--success-dark);}
+.badge-registered{background:var(--warning-light);color:var(--warning-dark);}
+.badge-enquired{background:var(--info-light);color:#0e7490;}
+.badge-withdrawn{background:var(--danger-light);color:var(--danger-dark);}
+
+/* ─── Name Link ─── */
+.name-link{color:var(--accent);cursor:pointer;text-decoration:none;font-weight:600;transition:color .15s;}
+.name-link:hover{color:var(--accent-hover);text-decoration:underline;}
+
+/* ─── Pagination ─── */
+.pagination-bar{display:flex;align-items:center;justify-content:center;gap:8px;padding:16px 0;}
+.pagination-bar button{padding:8px 16px;border-radius:var(--radius);font-size:13px;font-weight:600;}
+.pagination-bar .page-info{font-size:13px;font-weight:500;color:var(--text-secondary);margin:0 8px;}
+
+/* ─── DB Status ─── */
+.db-status-bar{display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+.db-count-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:var(--success-light);border:1px solid #86efac;border-radius:20px;font-size:14px;font-weight:700;color:var(--success-dark);}
+.upload-group{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.upload-status{font-size:12px;font-weight:600;}
+
+/* ─── User Management ─── */
+.user-mgmt-header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.user-table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px;}
+.user-table th{background:var(--primary-light);color:#e2e8f0;padding:10px 14px;text-align:left;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;}
+.user-table td{padding:9px 14px;border-bottom:1px solid var(--border);}
+.user-table tr:hover{background:var(--bg);}
+.status-active{color:var(--success-dark);font-weight:700;font-size:12px;}
+.status-inactive{color:var(--text-muted);font-weight:500;font-size:12px;}
+
+/* ─── Loading Overlay ─── */
+.loading-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(241,245,249,0.92);z-index:200;justify-content:center;align-items:center;flex-direction:column;gap:16px;backdrop-filter:blur(4px);}
 .loading-overlay.show{display:flex;}
-.spinner{width:50px;height:50px;border:5px solid #ddd;border-top:5px solid #007bff;border-radius:50%;animation:spin .8s linear infinite;}
+.spinner{width:44px;height:44px;border:4px solid var(--border);border-top:4px solid var(--accent);border-radius:50%;animation:spin .7s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
-.loading-text{font-size:18px;color:#333;font-weight:600;}
+.loading-text{font-size:15px;color:var(--text-secondary);font-weight:600;}
 
-/* Popup / Modal */
-.modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:100;justify-content:center;align-items:center;}
+/* ─── Modal ─── */
+.modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,0.6);z-index:100;justify-content:center;align-items:center;backdrop-filter:blur(4px);}
 .modal-overlay.show{display:flex;}
-.modal{background:white;border-radius:12px;padding:30px;max-width:700px;width:95%;max-height:85vh;overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,0.25);position:relative;}
-.modal-close{position:absolute;top:12px;right:16px;font-size:24px;cursor:pointer;color:#999;background:none;border:none;padding:0;font-weight:700;}
-.modal-close:hover{color:#333;}
-.modal h3{margin-bottom:16px;color:#1a1a2e;font-size:20px;border-bottom:2px solid #007bff;padding-bottom:8px;}
-.modal-section{margin-bottom:16px;}
-.modal-section h4{color:#007bff;margin-bottom:8px;font-size:15px;}
-.modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 20px;}
+.modal{background:var(--surface);border-radius:var(--radius-xl);padding:28px;max-width:720px;width:95%;max-height:85vh;overflow-y:auto;box-shadow:var(--shadow-xl);position:relative;border:1px solid var(--border);}
+.modal-close{position:absolute;top:12px;right:14px;font-size:22px;cursor:pointer;color:var(--text-muted);background:var(--bg);border:1px solid var(--border);border-radius:6px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;padding:0;font-weight:600;transition:all .15s;}
+.modal-close:hover{color:var(--danger);background:var(--danger-light);border-color:var(--danger);transform:none;box-shadow:none;}
+.modal h3{margin-bottom:16px;color:var(--text);font-size:18px;font-weight:700;border-bottom:2px solid var(--accent);padding-bottom:10px;}
+.modal-section{margin-bottom:18px;}
+.modal-section h4{color:var(--accent);margin-bottom:8px;font-size:14px;font-weight:700;display:flex;align-items:center;gap:6px;}
+.modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 20px;}
 .modal-grid .item{display:flex;gap:6px;padding:4px 0;}
-.modal-grid .lbl{font-weight:600;color:#555;min-width:120px;font-size:13px;}
-.modal-grid .val{color:#222;font-size:13px;}
+.modal-grid .lbl{font-weight:600;color:var(--text-muted);min-width:120px;font-size:12px;}
+.modal-grid .val{color:var(--text);font-size:12px;font-weight:500;}
 .date-cards{display:flex;gap:12px;flex-wrap:wrap;margin:12px 0;}
-.date-card{flex:1;min-width:180px;padding:14px;border-radius:8px;text-align:center;}
-.date-card.enq{background:#e3f2fd;border:1px solid #90caf9;}
-.date-card.reg{background:#fff3e0;border:1px solid #ffcc80;}
-.date-card.adm{background:#e8f5e9;border:1px solid #a5d6a7;}
-.date-card .dt-label{font-weight:600;font-size:13px;color:#555;margin-bottom:4px;}
-.date-card .dt-val{font-size:18px;font-weight:700;color:#333;}
-.date-card .dt-val.empty{color:#bbb;font-size:14px;}
+.date-card{flex:1;min-width:180px;padding:14px;border-radius:var(--radius);text-align:center;}
+.date-card.enq{background:var(--info-light);border:1px solid #67e8f9;}
+.date-card.reg{background:var(--warning-light);border:1px solid #fcd34d;}
+.date-card.adm{background:var(--success-light);border:1px solid #6ee7b7;}
+.date-card .dt-label{font-weight:600;font-size:12px;color:var(--text-secondary);margin-bottom:4px;}
+.date-card .dt-val{font-size:18px;font-weight:700;color:var(--text);}
+.date-card .dt-val.empty{color:var(--text-muted);font-size:13px;font-weight:500;}
 
-@media print{.controls,.tabs,.search-bar,button,.card,.modal-overlay,.db-status{cursor:default;} .no-print{display:none!important;}}
-@media(max-width:600px){.summary{flex-direction:column;align-items:center;}.controls{flex-direction:column;}.modal-grid{grid-template-columns:1fr;}}
+/* ─── Login Page ─── */
+.login-page{display:flex;justify-content:center;align-items:center;min-height:100vh;background:linear-gradient(135deg,#0f172a 0%,#1e293b 50%,#0f172a 100%);padding:20px;}
+.login-box{background:var(--surface);padding:44px 40px;border-radius:var(--radius-xl);width:420px;max-width:100%;box-shadow:var(--shadow-xl);text-align:center;border:1px solid var(--border);}
+.login-box .login-logo{width:56px;height:56px;background:var(--accent);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:26px;margin:0 auto 16px;}
+.login-box h2{margin-bottom:4px;color:var(--text);font-size:22px;font-weight:800;letter-spacing:-0.5px;}
+.login-box p{color:var(--text-muted);margin-bottom:28px;font-size:13px;font-weight:500;}
+.login-box input{width:100%;padding:12px 16px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:14px;margin-bottom:12px;background:var(--bg);}
+.login-box input:focus{border-color:var(--accent);background:var(--surface);}
+.login-box button{width:100%;padding:12px;font-size:14px;border-radius:var(--radius);margin-bottom:0;font-weight:700;letter-spacing:0.2px;}
+.login-error{color:var(--danger);font-size:12px;font-weight:600;min-height:18px;margin-bottom:8px;}
+
+/* ─── Admin Panel Specific ─── */
+.admin-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+@media(max-width:900px){.admin-grid{grid-template-columns:1fr;}}
+
+/* ─── Responsive ─── */
+@media print{.navbar,.no-print{display:none!important;}.main-content{padding:0;}}
+@media(max-width:768px){
+  .summary{grid-template-columns:1fr;}
+  .controls{flex-direction:column;align-items:stretch;}
+  .filter-bar{flex-direction:column;align-items:stretch;}
+  .filter-bar select{min-width:100%;}
+  .modal-grid{grid-template-columns:1fr;}
+  .login-box{width:95%;padding:28px 20px;}
+  .navbar{padding:0 12px;}
+  .nav-links{display:none;}
+  .main-content{padding:16px 12px;}
+  .admin-grid{grid-template-columns:1fr;}
+}
+@media(max-width:480px){
+  .card .number{font-size:28px;}
+}
+
+/* ─── Utility ─── */
+.hidden{display:none!important;}
+.flex-between{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;}
 </style>
 </head>
 <body>
 
-<div class="container">
-<h2>📊 Graphic Era— Student Data Dashboard</h2>
+<!-- ═══════════ LOGIN PAGE ═══════════ -->
+<div id="loginPage" class="login-page" style="display:none;">
+<div class="login-box">
+<div class="login-logo">📊</div>
+<h2>Graphic Era University</h2>
+<p>Student Admission Dashboard</p>
+<div class="login-error" id="loginError"></div>
+<input type="email" id="loginEmail" placeholder="Email address" onkeydown="if(event.key==='Enter')doLogin()">
+<input type="password" id="loginPassword" placeholder="Password" onkeydown="if(event.key==='Enter')doLogin()">
+<button onclick="doLogin()">Sign In</button>
+</div>
+</div>
+
+<!-- ═══════════ MAIN APP (hidden until login) ═══════════ -->
+<div id="dashboardPage" style="display:none;">
+
+<!-- ── Navbar ── -->
+<nav class="navbar no-print" id="userBar">
+  <div class="nav-brand">
+    <div class="logo-icon">📊</div>
+    <span>GEU Admissions</span>
+  </div>
+  <div class="nav-links">
+    <button class="nav-link active" id="navDashboard" onclick="switchView('dashboard')">Dashboard</button>
+    <button class="nav-link admin-only" id="navAdmin" onclick="switchView('admin')" style="display:none;">Admin Panel</button>
+  </div>
+  <div class="nav-right">
+    <div class="nav-user">
+      <div class="nav-avatar" id="navAvatar">A</div>
+      <span id="userName"></span>
+      <span class="nav-role" id="userRole"></span>
+    </div>
+    <button class="logout-btn" onclick="doLogout()">Logout</button>
+  </div>
+</nav>
 
 <!-- Loading Spinner -->
 <div class="loading-overlay" id="loadingOverlay">
@@ -100,82 +280,158 @@ tr:hover{background:#e8edff;}
 <div class="loading-text" id="loadingText">Loading data...</div>
 </div>
 
-<!-- DB Status -->
-<div class="db-status no-print" id="dbStatus">
-  <span class="label">📦 Students in Database:</span>
-  <span class="count" id="dbCount">Loading...</span>
-  <span style="color:#999;">|</span>
-  <label style="font-weight:600;color:#333;">Upload CSV to DB:</label>
-  <input type="file" id="csvUpload" accept=".csv" style="padding:6px;border:1px solid #ccc;border-radius:6px;">
-  <button class="upload-btn" onclick="uploadCSV()">⬆ Upload to Database</button>
-  <button class="migrate-btn" onclick="migrateDates()">🔄 Fix Old Data</button>
-  <span id="uploadStatus" style="color:#28a745;font-weight:600;"></span>
-</div>
+<!-- ═══════════ DASHBOARD VIEW ═══════════ -->
+<div class="main-content" id="viewDashboard">
 
-<div class="controls no-print">
-<label>Start Date:</label>
-<input type="date" id="startDate">
-<label>End Date:</label>
-<input type="date" id="endDate">
-<button onclick="loadFromDB()">Generate Report</button>
-<button class="print-btn" onclick="window.print()">🖨 Print</button>
-</div>
+  <!-- Date Range Controls -->
+  <div class="section-card">
+    <div class="section-body">
+      <div class="flex-between">
+        <div class="controls no-print">
+          <label>From</label>
+          <input type="date" id="startDate">
+          <label>To</label>
+          <input type="date" id="endDate">
+          <button onclick="loadFromDB()">Generate Report</button>
+        </div>
+        <button class="btn-outline no-print" onclick="window.print()">🖨 Print</button>
+      </div>
+    </div>
+  </div>
 
-<div class="summary" id="summaryCards" style="display:none;">
-<div class="card active" onclick="showTab('enquiry')">
-<h3>📩 Enquiries</h3>
-<div class="number" id="enquiryCount">0</div>
-<small>by Date of Enquiry</small>
-</div>
-<div class="card" onclick="showTab('registration')">
-<h3>📝 Registrations</h3>
-<div class="number" id="registrationCount">0</div>
-<small>by Date of Registration</small>
-</div>
-<div class="card" onclick="showTab('admission')">
-<h3>🎓 Admissions</h3>
-<div class="number" id="admissionCount">0</div>
-<small>by Date of Admission</small>
-</div>
-</div>
+  <!-- Summary Cards -->
+  <div class="summary" id="summaryCards" style="display:none;">
+    <div class="card card-enquiry active" onclick="showTab('enquiry')">
+      <h3>Enquiries</h3>
+      <div class="number" id="enquiryCount">0</div>
+      <small>by Date of Enquiry</small>
+    </div>
+    <div class="card card-registration" onclick="showTab('registration')">
+      <h3>Registrations</h3>
+      <div class="number" id="registrationCount">0</div>
+      <small>by Date of Registration</small>
+    </div>
+    <div class="card card-admission" onclick="showTab('admission')">
+      <h3>Admissions</h3>
+      <div class="number" id="admissionCount">0</div>
+      <small>by Date of Admission</small>
+    </div>
+  </div>
 
-<div id="tabSection" style="display:none;">
-<div class="tabs no-print">
-<button class="tab-btn active" data-tab="enquiry" onclick="showTab('enquiry')">Enquiries</button>
-<button class="tab-btn" data-tab="registration" onclick="showTab('registration')">Registrations</button>
-<button class="tab-btn" data-tab="admission" onclick="showTab('admission')">Admissions</button>
-<button class="tab-btn" data-tab="all" onclick="showTab('all')">All Combined</button>
-</div>
-<div class="filter-bar no-print">
-<label>🏫 Campus/Center:</label>
-<select id="campusFilter" onchange="filterTable()">
-<option value="">Campus</option>
-</select>
-<label>📚 Course Name:</label>
-<select id="courseFilter" onchange="filterTable()">
-<option value="">All Courses</option>
-</select>
-<label>📅 Year:</label>
-<select id="yearFilter" onchange="filterTable()">
-</select>
-</div>
-<div class="search-bar no-print">
-<input type="text" id="searchInput" placeholder="🔍 Search by name, course, ID, status..." oninput="filterTable()">
-</div>
-<div class="download-bar no-print">
-<button class="dl-btn" onclick="downloadCurrentExcel()">⬇ Download Current Tab (Excel)</button>
-<button class="dl-all-btn" onclick="downloadAllExcel()">📦 Download All Reports (Excel)</button>
-</div>
-<div class="table-wrap" id="tableWrap"></div>
-<div id="paginationBar" style="display:none;text-align:center;padding:14px 0;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap;">
-<button id="prevBtn" onclick="changePage(-1)" style="padding:8px 18px;font-size:14px;border-radius:6px;border:1px solid #007bff;background:#007bff;color:white;cursor:pointer;font-weight:600;">◀ Previous</button>
-<span id="pageInfo" style="font-weight:600;color:#333;font-size:15px;margin:0 12px;"></span>
-<button id="nextBtn" onclick="changePage(1)" style="padding:8px 18px;font-size:14px;border-radius:6px;border:1px solid #007bff;background:#007bff;color:white;cursor:pointer;font-weight:600;">Next ▶</button>
-</div>
-</div>
-</div>
+  <!-- Data Table Section -->
+  <div id="tabSection" style="display:none;">
+    <div class="section-card">
+      <div class="section-body" style="padding-bottom:0;">
 
-<!-- Student Detail Popup -->
+        <!-- Tabs -->
+        <div class="tabs no-print">
+          <button class="tab-btn active" data-tab="enquiry" onclick="showTab('enquiry')">Enquiries</button>
+          <button class="tab-btn" data-tab="registration" onclick="showTab('registration')">Registrations</button>
+          <button class="tab-btn" data-tab="admission" onclick="showTab('admission')">Admissions</button>
+          <button class="tab-btn" data-tab="all" onclick="showTab('all')">All Combined</button>
+        </div>
+
+        <!-- Filters -->
+        <div class="filter-bar no-print">
+          <div class="filter-group">
+            <label>Campus</label>
+            <select id="campusFilter" onchange="filterTable()">
+              <option value="">All Campuses</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label>Course</label>
+            <select id="courseFilter" onchange="filterTable()">
+              <option value="">All Courses</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label>Year</label>
+            <select id="yearFilter" onchange="filterTable()">
+            </select>
+          </div>
+        </div>
+
+        <!-- Search -->
+        <div class="search-bar no-print">
+          <input type="text" id="searchInput" placeholder="Search by name, course, ID, status..." oninput="filterTable()">
+        </div>
+
+        <!-- Download Buttons -->
+        <div class="download-bar no-print">
+          <button class="btn-purple" onclick="downloadCurrentExcel()">⬇ Download Current Tab</button>
+          <button class="btn-pink" onclick="downloadAllExcel()">📦 Download All Reports</button>
+        </div>
+
+        <!-- Table -->
+        <div class="table-wrap" id="tableWrap"></div>
+
+        <!-- Pagination -->
+        <div id="paginationBar" class="pagination-bar" style="display:none;">
+          <button id="prevBtn" onclick="changePage(-1)" class="btn-outline">◀ Previous</button>
+          <span id="pageInfo" class="page-info"></span>
+          <button id="nextBtn" onclick="changePage(1)" class="btn-outline">Next ▶</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /viewDashboard -->
+
+<!-- ═══════════ ADMIN VIEW (hidden by default) ═══════════ -->
+<div class="main-content hidden" id="viewAdmin">
+
+  <div class="admin-grid">
+
+    <!-- Database Management -->
+    <div class="section-card admin-only" id="dbStatus" style="display:none;">
+      <div class="section-header">
+        <div class="section-title">
+          <span class="icon" style="background:var(--success-light);color:var(--success-dark);">📦</span>
+          Database Management
+        </div>
+        <div class="db-count-badge" id="dbCount">Loading...</div>
+      </div>
+      <div class="section-body">
+        <div class="db-status-bar">
+          <div class="upload-group">
+            <label>Upload Student CSV</label>
+            <input type="file" id="csvUpload" accept=".csv">
+            <button class="btn-warning" onclick="uploadCSV()">⬆ Upload</button>
+            <button class="btn-sm btn-ghost" onclick="migrateDates()">🔄 Fix Old Data</button>
+          </div>
+        </div>
+        <div id="uploadStatus" class="upload-status" style="margin-top:10px;"></div>
+      </div>
+    </div>
+
+    <!-- User Management -->
+    <div class="section-card admin-only" id="userMgmt" style="display:none;">
+      <div class="section-header">
+        <div class="section-title">
+          <span class="icon" style="background:var(--purple-light);color:var(--purple-dark);">👥</span>
+          User Management
+        </div>
+      </div>
+      <div class="section-body">
+        <div class="user-mgmt-header">
+          <label>Upload Users CSV</label>
+          <input type="file" id="userCsvUpload" accept=".csv">
+          <button class="btn-purple btn-sm" onclick="uploadUsers()">⬆ Upload Users</button>
+          <span id="userUploadStatus" class="upload-status"></span>
+        </div>
+        <small style="color:var(--text-muted);display:block;margin:8px 0;">CSV must have Email, Password, Name columns</small>
+        <div id="userListWrap" style="max-height:320px;overflow-y:auto;margin-top:8px;"></div>
+      </div>
+    </div>
+
+  </div><!-- /admin-grid -->
+
+</div><!-- /viewAdmin -->
+
+</div><!-- /dashboardPage -->
+
+<!-- ═══════════ Student Detail Modal ═══════════ -->
 <div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
 <div class="modal" onclick="event.stopPropagation()">
 <button class="modal-close" onclick="document.getElementById('modalOverlay').classList.remove('show')">&times;</button>
@@ -191,6 +447,130 @@ tr:hover{background:#e8edff;}
 let currentTab='enquiry';
 let currentPage=1, totalPages=1, totalRecords=0;
 let searchTimer=null;
+let authToken=null;
+let userRole=null;
+
+// ─── Auth Helpers ───
+function getToken(){ return localStorage.getItem('authToken'); }
+function setToken(token){ localStorage.setItem('authToken',token); authToken=token; }
+function clearToken(){ localStorage.removeItem('authToken'); localStorage.removeItem('userRole'); localStorage.removeItem('userName'); authToken=null; userRole=null; }
+
+function authHeaders(){
+  const t=getToken();
+  return t ? { 'Authorization': 'Bearer '+t } : {};
+}
+
+function authFetch(url, opts={}){
+  opts.headers = { ...(opts.headers||{}), ...authHeaders() };
+  return fetch(url, opts).then(r => {
+    if(r.status===401){ clearToken(); showLoginPage(); throw new Error('Session expired. Please login again.'); }
+    return r;
+  });
+}
+
+// ─── Login / Logout ───
+async function doLogin(){
+  const email=document.getElementById('loginEmail').value.trim();
+  const password=document.getElementById('loginPassword').value;
+  const errEl=document.getElementById('loginError');
+  errEl.textContent='';
+
+  if(!email||!password){ errEl.textContent='Please enter email and password.'; return; }
+
+  try{
+    const r=await fetch('/api/login',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email,password})
+    });
+    const d=await r.json();
+    if(!r.ok){ errEl.textContent=d.error||'Login failed'; return; }
+
+    setToken(d.token);
+    localStorage.setItem('userRole',d.role);
+    localStorage.setItem('userName',d.name||d.email);
+    showDashboard(d.role, d.name||d.email);
+  }catch(e){
+    errEl.textContent='Login failed: '+e.message;
+  }
+}
+
+function doLogout(){
+  clearToken();
+  showLoginPage();
+}
+
+function showLoginPage(){
+  document.getElementById('loginPage').style.display='flex';
+  document.getElementById('dashboardPage').style.display='none';
+  document.getElementById('loginEmail').value='';
+  document.getElementById('loginPassword').value='';
+  document.getElementById('loginError').textContent='';
+}
+
+function showDashboard(role, name){
+  userRole=role;
+  document.getElementById('loginPage').style.display='none';
+  document.getElementById('dashboardPage').style.display='block';
+
+  // Navbar user info
+  document.getElementById('userName').textContent=name;
+  const roleEl=document.getElementById('userRole');
+  roleEl.textContent=role.toUpperCase();
+  roleEl.className='nav-role '+(role==='admin'?'role-admin':'role-user');
+
+  // Avatar initials
+  const initials=name.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
+  document.getElementById('navAvatar').textContent=initials||'U';
+
+  // Show/hide admin sections
+  document.querySelectorAll('.admin-only').forEach(el=>{
+    el.style.display=role==='admin'?'':'none';
+  });
+
+  // Always start on dashboard view
+  switchView('dashboard');
+
+  loadDBCount();
+  if(role==='admin') loadUserList();
+}
+
+// ─── View Switching (Dashboard vs Admin Panel) ───
+function switchView(view){
+  const dash=document.getElementById('viewDashboard');
+  const admin=document.getElementById('viewAdmin');
+  const navDash=document.getElementById('navDashboard');
+  const navAdmin=document.getElementById('navAdmin');
+
+  if(view==='admin'){
+    dash.classList.add('hidden');
+    admin.classList.remove('hidden');
+    navDash.classList.remove('active');
+    navAdmin.classList.add('active');
+  }else{
+    dash.classList.remove('hidden');
+    admin.classList.add('hidden');
+    navDash.classList.add('active');
+    navAdmin.classList.remove('active');
+  }
+}
+
+// ─── Auto-login if token exists ───
+(function checkSession(){
+  const token=getToken();
+  if(token){
+    showLoading('Verifying session...');
+    const role=localStorage.getItem('userRole')||'user';
+    const name=localStorage.getItem('userName')||'User';
+    fetch('/api/count',{headers:{'Authorization':'Bearer '+token}}).then(r=>{
+      hideLoading();
+      if(r.ok){ showDashboard(role,name); }
+      else{ clearToken(); showLoginPage(); }
+    }).catch(()=>{ hideLoading(); showLoginPage(); });
+  }else{
+    showLoginPage();
+  }
+})();
 
 function showLoading(text){
   document.getElementById('loadingText').textContent=text||'Loading data...';
@@ -203,12 +583,11 @@ function hideLoading(){
 // ─── Load DB count on page load ───
 async function loadDBCount(){
   try{
-    const r=await fetch('/api/count');
+    const r=await authFetch('/api/count');
     const d=await r.json();
     document.getElementById('dbCount').textContent=d.count+' records';
   }catch(e){document.getElementById('dbCount').textContent='Error';}
 }
-loadDBCount();
 
 // ─── Upload CSV to MongoDB ───
 async function uploadCSV(){
@@ -223,7 +602,7 @@ async function uploadCSV(){
   formData.append('csvFile',file);
 
   try{
-    const r=await fetch('/api/upload',{method:'POST',body:formData});
+    const r=await authFetch('/api/upload',{method:'POST',body:formData});
     const d=await r.json();
     if(d.success){
       status.textContent='✓ '+d.count+' students uploaded!';
@@ -245,7 +624,7 @@ async function migrateDates(){
   showLoading('Migrating old records...');
   const status=document.getElementById('uploadStatus');
   try{
-    const r=await fetch('/api/migrate-dates',{method:'POST'});
+    const r=await authFetch('/api/migrate-dates',{method:'POST'});
     const d=await r.json();
     status.textContent='✓ Migrated '+d.migrated+' records';
     status.style.color='#28a745';
@@ -279,7 +658,7 @@ async function loadFromDB(){
   showLoading('Fetching summary...');
 
   try{
-    const r=await fetch('/api/students?startDate='+sv+'&endDate='+ev);
+    const r=await authFetch('/api/students?startDate='+sv+'&endDate='+ev);
     const d=await r.json();
 
     // Update counts
@@ -304,7 +683,21 @@ async function loadFromDB(){
     document.getElementById('tabSection').style.display='block';
     currentTab='enquiry';
     currentPage=1;
-    showTab('enquiry');
+
+    // Load first page inline (no second loading cycle)
+    try{
+      const pr=await authFetch('/api/students/page?'+getQueryParams('enquiry',1));
+      const pd=await pr.json();
+      totalPages=pd.totalPages||1;
+      totalRecords=pd.total||0;
+      document.querySelectorAll('.tab-btn').forEach(b=>{b.classList.toggle('active',b.dataset.tab==='enquiry');});
+      let cards=document.querySelectorAll('.summary .card');
+      cards[0].classList.add('active');
+      cards[1].classList.remove('active');
+      cards[2].classList.remove('active');
+      renderTable(pd.students||[]);
+      updatePagination();
+    }catch(pe){}
   }catch(e){
     alert('Error loading data: '+e.message);
   }finally{hideLoading();}
@@ -317,17 +710,16 @@ async function loadPage(page){
   if(!sv||!ev) return;
 
   currentPage=page||1;
-  showLoading('Loading page '+currentPage+'...');
+  showLoading('Loading...');
 
   try{
-    const r=await fetch('/api/students/page?'+getQueryParams(currentTab, currentPage));
+    const r=await authFetch('/api/students/page?'+getQueryParams(currentTab, currentPage));
     const d=await r.json();
 
     totalPages=d.totalPages||1;
     totalRecords=d.total||0;
     renderTable(d.students||[]);
     updatePagination();
-    updateFilteredCounts();
   }catch(e){
     document.getElementById('tableWrap').innerHTML='<div class="no-data">Error loading data: '+e.message+'</div>';
   }finally{hideLoading();}
@@ -346,7 +738,7 @@ async function updateFilteredCounts(){
 
   // If no filters are active, just use summary API
   if(!campus&&!course&&!year&&!search) {
-    const r=await fetch('/api/students?startDate='+sv+'&endDate='+ev);
+    const r=await authFetch('/api/students?startDate='+sv+'&endDate='+ev);
     const d=await r.json();
     document.getElementById('enquiryCount').innerText=d.enquiryCount||0;
     document.getElementById('registrationCount').innerText=d.registrationCount||0;
@@ -357,9 +749,9 @@ async function updateFilteredCounts(){
   // With filters, get counts via the paginate endpoint (page=1, limit=1)
   try{
     const [enqR, regR, admR] = await Promise.all([
-      fetch('/api/students/page?'+getQueryParams('enquiry',1)+'&limit=1').then(r=>r.json()),
-      fetch('/api/students/page?'+getQueryParams('registration',1)+'&limit=1').then(r=>r.json()),
-      fetch('/api/students/page?'+getQueryParams('admission',1)+'&limit=1').then(r=>r.json())
+      authFetch('/api/students/page?'+getQueryParams('enquiry',1)+'&limit=1').then(r=>r.json()),
+      authFetch('/api/students/page?'+getQueryParams('registration',1)+'&limit=1').then(r=>r.json()),
+      authFetch('/api/students/page?'+getQueryParams('admission',1)+'&limit=1').then(r=>r.json())
     ]);
     document.getElementById('enquiryCount').innerText=enqR.total||0;
     document.getElementById('registrationCount').innerText=regR.total||0;
@@ -391,7 +783,7 @@ async function showStudentDetail(id){
   document.getElementById('modalBody').innerHTML='<div style="text-align:center;padding:30px;color:#999;">Loading student details...</div>';
 
   try{
-    const r=await fetch('/api/student/'+id);
+    const r=await authFetch('/api/student/'+id);
     const s=await r.json();
 
     let html='';
@@ -489,7 +881,7 @@ function showTab(tab){
   currentTab=tab;
   currentPage=1;
   document.querySelectorAll('.tab-btn').forEach(b=>{b.classList.toggle('active',b.dataset.tab===tab);});
-  let cards=document.querySelectorAll('.card');
+  let cards=document.querySelectorAll('.summary .card');
   cards[0].classList.toggle('active',tab==='enquiry');
   cards[1].classList.toggle('active',tab==='registration');
   cards[2].classList.toggle('active',tab==='admission');
@@ -531,9 +923,11 @@ function renderTable(list){
 
 function filterTable(){
   currentPage=1;
-  // Debounce search input
   clearTimeout(searchTimer);
-  searchTimer=setTimeout(()=>{loadPage(1);},300);
+  searchTimer=setTimeout(()=>{
+    loadPage(1);
+    updateFilteredCounts(); // background, non-blocking
+  },300);
 }
 
 // ─── Excel Export (fetches all from server) ───
@@ -557,7 +951,7 @@ async function downloadCurrentExcel(){
   if(!sv||!ev){alert('No data to download.');return;}
   showLoading('Exporting data...');
   try{
-    const r=await fetch('/api/students/export?'+getQueryParams(currentTab,1));
+    const r=await authFetch('/api/students/export?'+getQueryParams(currentTab,1));
     const d=await r.json();
 
     let list=d.students||[];
@@ -584,7 +978,7 @@ async function downloadAllExcel(){
   if(!sv||!ev){alert('No data to download.');return;}
   showLoading('Exporting all data...');
   try{
-    const r=await fetch('/api/students/export?'+getQueryParams('allSheets',1));
+    const r=await authFetch('/api/students/export?'+getQueryParams('allSheets',1));
     const d=await r.json();
 
     const el=d.enquiries||[], rl=d.registrations||[], al=d.admissions||[];
@@ -604,6 +998,75 @@ async function downloadAllExcel(){
     if(all.length>0) addSheet(all,'All Combined',true);
     XLSX.writeFile(wb,'GEU_All_Reports.xlsx');
   }catch(e){alert('Export failed: '+e.message);}finally{hideLoading();}
+}
+
+// ─── User Management (Admin) ───
+async function uploadUsers(){
+  const file=document.getElementById('userCsvUpload').files[0];
+  if(!file){alert('Select a CSV file with Email, Password, Name columns.');return;}
+  const status=document.getElementById('userUploadStatus');
+  status.textContent='Uploading...';
+  status.style.color='#ff9800';
+
+  const formData=new FormData();
+  formData.append('csvFile',file);
+
+  try{
+    const r=await authFetch('/api/users/upload',{method:'POST',body:formData});
+    const d=await r.json();
+    if(d.success){
+      status.textContent='✓ '+d.created+' created, '+d.updated+' updated ('+d.total+' total)';
+      status.style.color='#28a745';
+      document.getElementById('userCsvUpload').value='';
+      loadUserList();
+    }else{
+      status.textContent='✗ '+d.error;
+      status.style.color='#dc3545';
+    }
+  }catch(e){
+    status.textContent='✗ Upload failed';
+    status.style.color='#dc3545';
+  }
+}
+
+async function loadUserList(){
+  try{
+    const r=await authFetch('/api/users');
+    const users=await r.json();
+    const wrap=document.getElementById('userListWrap');
+    if(!users.length){wrap.innerHTML='<p style="color:#999;">No users yet. Upload a CSV with Email, Password, Name columns.</p>';return;}
+
+    let html='<table class="user-table"><thead><tr><th>Name</th><th>Email</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead><tbody>';
+    users.forEach(u=>{
+      const active=u.active!==false;
+      html+='<tr>';
+      html+='<td>'+(u.name||'-')+'</td>';
+      html+='<td>'+u.email+'</td>';
+      html+='<td>'+(active?'<span class="status-active">Active</span>':'<span class="status-inactive">Inactive</span>')+'</td>';
+      html+='<td>'+(u.createdAt?new Date(u.createdAt).toLocaleDateString():'')+'</td>';
+      html+='<td style="display:flex;gap:6px;">';
+      html+='<button class="btn-sm '+(active?'btn-success':'btn-ghost')+'" onclick="toggleUser(\''+u._id+'\')">'+(active?'Deactivate':'Activate')+'</button> ';
+      html+='<button class="btn-sm btn-danger" onclick="deleteUser(\''+u._id+'\',\''+u.email+'\')">Delete</button>';
+      html+='</td></tr>';
+    });
+    html+='</tbody></table>';
+    wrap.innerHTML=html;
+  }catch(e){}
+}
+
+async function toggleUser(id){
+  try{
+    await authFetch('/api/users/'+id+'/toggle',{method:'PATCH'});
+    loadUserList();
+  }catch(e){alert('Failed to toggle user');}
+}
+
+async function deleteUser(id,email){
+  if(!confirm('Delete user '+email+'?')) return;
+  try{
+    await authFetch('/api/users/'+id,{method:'DELETE'});
+    loadUserList();
+  }catch(e){alert('Failed to delete user');}
 }
 </script>
 

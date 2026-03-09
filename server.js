@@ -6,15 +6,163 @@ const csvParser = require('csv-parser');
 const { Readable } = require('stream');
 const path = require('path');
 const cors = require('cors');
+const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+const JWT_SECRET = process.env.JWT_SECRET || 'default-secret-change-me';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@geu.ac.in';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Admin@123';
+
 // ─── MongoDB Connection ───
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/admission_dashboard';
 mongoose.connect(MONGO_URI).then(() => console.log('MongoDB connected')).catch(e => { console.error('MongoDB error:', e); process.exit(1); });
+
+// ─── User Schema ───
+const userSchema = new mongoose.Schema({
+  email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+  password: { type: String, required: true },
+  name: { type: String, default: '' },
+  role: { type: String, enum: ['user', 'admin'], default: 'user' },
+  active: { type: Boolean, default: true }
+}, { timestamps: true });
+userSchema.index({ email: 1 });
+const User = mongoose.model('User', userSchema);
+
+// ─── Helper: hash password (SHA256 — simple, no bcrypt needed for CSV passwords) ───
+function hashPass(pass) {
+  return crypto.createHash('sha256').update(pass).digest('hex');
+}
+
+// ─── JWT Auth Middleware ───
+function auth(req, res, next) {
+  const header = req.headers.authorization;
+  if (!header || !header.startsWith('Bearer ')) return res.status(401).json({ error: 'Login required' });
+  try {
+    const decoded = jwt.verify(header.split(' ')[1], JWT_SECRET);
+    req.user = decoded; // { email, role }
+    next();
+  } catch (e) {
+    return res.status(401).json({ error: 'Invalid or expired token. Please login again.' });
+  }
+}
+
+// ─── Admin-only Middleware ───
+function adminOnly(req, res, next) {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+  next();
+}
+
+// ─── Multer for file uploads ───
+const upload_mem = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+
+// ─── Login Endpoint ───
+app.post('/api/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ error: 'Email and password are required' });
+
+    const emailLower = email.toLowerCase().trim();
+
+    // Check if admin
+    if (emailLower === ADMIN_EMAIL.toLowerCase() && password === ADMIN_PASSWORD) {
+      const token = jwt.sign({ email: emailLower, role: 'admin' }, JWT_SECRET, { expiresIn: '24h' });
+      return res.json({ token, role: 'admin', name: 'Administrator', email: emailLower });
+    }
+
+    // Check user in DB
+    const user = await User.findOne({ email: emailLower, active: true });
+    if (!user) return res.status(401).json({ error: 'Invalid email or password' });
+    if (user.password !== hashPass(password)) return res.status(401).json({ error: 'Invalid email or password' });
+
+    const token = jwt.sign({ email: user.email, role: 'user', userId: user._id }, JWT_SECRET, { expiresIn: '24h' });
+    res.json({ token, role: 'user', name: user.name || user.email, email: user.email });
+  } catch (err) {
+    console.error('Login error:', err);
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// ─── Admin: Upload users CSV ───
+app.post('/api/users/upload', auth, adminOnly, upload_mem.single('csvFile'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const users = [];
+
+    await new Promise((resolve, reject) => {
+      const stream = Readable.from(req.file.buffer.toString('utf-8'));
+      stream.pipe(csvParser())
+        .on('data', row => {
+          const email = (row['Email'] || row['email'] || row['Email ID'] || row['EmailID'] || '').trim().toLowerCase();
+          const password = (row['Password'] || row['password'] || '').trim();
+          const name = (row['Name'] || row['name'] || '').trim();
+          if (email && password) {
+            users.push({ email, password: hashPass(password), name, role: 'user', active: true });
+          }
+        })
+        .on('end', resolve)
+        .on('error', reject);
+    });
+
+    if (users.length === 0) return res.status(400).json({ error: 'No valid users found. CSV must have Email and Password columns.' });
+
+    // Upsert: update if email exists, insert if new
+    let created = 0, updated = 0;
+    for (const u of users) {
+      const result = await User.updateOne(
+        { email: u.email },
+        { $set: u },
+        { upsert: true }
+      );
+      if (result.upsertedCount > 0) created++;
+      else updated++;
+    }
+
+    res.json({ success: true, created, updated, total: users.length });
+  } catch (err) {
+    console.error('User upload error:', err);
+    res.status(500).json({ error: 'User upload failed: ' + err.message });
+  }
+});
+
+// ─── Admin: List all users ───
+app.get('/api/users', auth, adminOnly, async (req, res) => {
+  try {
+    const users = await User.find({}, { password: 0 }).sort({ createdAt: -1 }).lean();
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Admin: Delete a user ───
+app.delete('/api/users/:id', auth, adminOnly, async (req, res) => {
+  try {
+    await User.findByIdAndDelete(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Admin: Toggle user active/inactive ───
+app.patch('/api/users/:id/toggle', auth, adminOnly, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    user.active = !user.active;
+    await user.save();
+    res.json({ success: true, active: user.active });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── MongoDB Connection ───
 
 // ─── Student Schema ───
 const studentSchema = new mongoose.Schema({
@@ -86,7 +234,7 @@ studentSchema.index({ campus: 1 });
 
 const Student = mongoose.model('Student', studentSchema);
 
-// ─── Helper: parse multiple date formats to Date ───
+ // ─── Helper: parse multiple date formats to Date ───
 const MONTH_MAP = { jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11 };
 function parseDate(str) {
   if (!str || !str.trim()) return null;
@@ -142,10 +290,8 @@ function parseDate(str) {
   return isNaN(fallback.getTime()) ? null : fallback;
 }
 
-// ─── Upload CSV to MongoDB ───
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
-
-app.post('/api/upload', upload.single('csvFile'), async (req, res) => {
+// ─── Upload CSV to MongoDB (ADMIN ONLY) ───
+app.post('/api/upload', auth, adminOnly, upload_mem.single('csvFile'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
@@ -323,7 +469,7 @@ const mapDoc = (s, campusField, dateStrField) => ({
 });
 
 // ─── Summary: counts + dropdowns only (fast) ───
-app.get('/api/students', async (req, res) => {
+app.get('/api/students', auth, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
     if (!startDate || !endDate) return res.status(400).json({ error: 'startDate and endDate required' });
@@ -383,7 +529,7 @@ app.get('/api/students', async (req, res) => {
 });
 
 // ─── Paginated students for a specific tab ───
-app.get('/api/students/page', async (req, res) => {
+app.get('/api/students/page', auth, async (req, res) => {
   try {
     const { startDate, endDate, tab, page = 1, limit = 30, campus, course, year, search } = req.query;
     if (!startDate || !endDate || !tab) return res.status(400).json({ error: 'startDate, endDate, tab required' });
@@ -435,7 +581,7 @@ app.get('/api/students/page', async (req, res) => {
 });
 
 // ─── Export all filtered students (for Excel download) ───
-app.get('/api/students/export', async (req, res) => {
+app.get('/api/students/export', auth, async (req, res) => {
   try {
     const { startDate, endDate, tab, campus, course, year, search } = req.query;
     if (!startDate || !endDate || !tab) return res.status(400).json({ error: 'startDate, endDate, tab required' });
@@ -472,7 +618,7 @@ app.get('/api/students/export', async (req, res) => {
 });
 
 // ─── Get single student detail (for popup) ───
-app.get('/api/student/:id', async (req, res) => {
+app.get('/api/student/:id', auth, async (req, res) => {
   try {
     const s = await Student.findById(req.params.id).lean();
     if (!s) return res.status(404).json({ error: 'Student not found' });
@@ -483,7 +629,7 @@ app.get('/api/student/:id', async (req, res) => {
 });
 
 // ─── Get all upload batches ───
-app.get('/api/batches', async (req, res) => {
+app.get('/api/batches', auth, adminOnly, async (req, res) => {
   try {
     const batches = await Student.aggregate([
       { $group: { _id: '$uploadBatch', count: { $sum: 1 }, firstUpload: { $min: '$createdAt' } } },
@@ -496,7 +642,7 @@ app.get('/api/batches', async (req, res) => {
 });
 
 // ─── Delete a batch ───
-app.delete('/api/batch/:batchId', async (req, res) => {
+app.delete('/api/batch/:batchId', auth, adminOnly, async (req, res) => {
   try {
     const result = await Student.deleteMany({ uploadBatch: req.params.batchId });
     res.json({ deleted: result.deletedCount });
@@ -506,7 +652,7 @@ app.delete('/api/batch/:batchId', async (req, res) => {
 });
 
 // ─── Get total student count ───
-app.get('/api/count', async (req, res) => {
+app.get('/api/count', auth, async (req, res) => {
   try {
     const count = await Student.countDocuments();
     res.json({ count });
@@ -516,7 +662,7 @@ app.get('/api/count', async (req, res) => {
 });
 
 // ─── Migrate: backfill parsed dates for old records ───
-app.post('/api/migrate-dates', async (req, res) => {
+app.post('/api/migrate-dates', auth, adminOnly, async (req, res) => {
   try {
     const students = await Student.find({ enquiryDateParsed: { $exists: false } }, { dateOfEnquiry: 1, dateOfRegistration: 1, dateOfAdmission: 1 }).lean();
     let updated = 0;
