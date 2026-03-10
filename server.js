@@ -423,12 +423,23 @@ function toLocalDate(str) {
 function buildDateFilter(dateField, start, end, extra) {
   const q = { [dateField]: { $gte: start, $lte: end } };
   if (extra.campus) {
-    q.$or = [
-      { enquiredCenter: extra.campus },
-      { registeredCenter: extra.campus },
-      { admittedCenter: extra.campus },
-      { campus: extra.campus }
-    ];
+    // "GEHU" matches all GEHU campuses (Dehradun, Bhimtal, Haldwani)
+    if (extra.campus.toUpperCase() === 'GEHU') {
+      const gehuRe = { $regex: /gehu/i };
+      q.$or = [
+        { enquiredCenter: gehuRe },
+        { registeredCenter: gehuRe },
+        { admittedCenter: gehuRe },
+        { campus: gehuRe }
+      ];
+    } else {
+      q.$or = [
+        { enquiredCenter: extra.campus },
+        { registeredCenter: extra.campus },
+        { admittedCenter: extra.campus },
+        { campus: extra.campus }
+      ];
+    }
   }
   if (extra.course) q.courseName = extra.course;
   if (extra.year) {

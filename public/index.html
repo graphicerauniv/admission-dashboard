@@ -668,7 +668,12 @@ async function loadFromDB(){
 
     // Populate dropdowns
     let campusSel=document.getElementById('campusFilter');
-    campusSel.innerHTML='<option value="">Campus</option>';
+    campusSel.innerHTML='<option value="">All Campuses</option>';
+    // Add GEHU grouped option if any GEHU campus exists
+    const gehuCampuses=(d.campuses||[]).filter(c=>c.toLowerCase().includes('gehu'));
+    if(gehuCampuses.length>1){
+      campusSel.innerHTML+='<option value="GEHU" style="font-weight:700;">⭐ GEHU (All Campuses)</option>';
+    }
     (d.campuses||[]).forEach(c=>{campusSel.innerHTML+='<option value="'+c+'">'+c+'</option>';});
 
     let courseSel=document.getElementById('courseFilter');
