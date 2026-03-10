@@ -247,7 +247,7 @@ function parseDate(str) {
     const mon = MONTH_MAP[monMatch[2].toLowerCase()];
     let yr = parseInt(monMatch[3], 10);
     if (yr < 100) yr += 2000;
-    if (mon !== undefined && !isNaN(day) && !isNaN(yr)) return new Date(yr, mon, day);
+    if (mon !== undefined && !isNaN(day) && !isNaN(yr)) return new Date(Date.UTC(yr, mon, day));
   }
 
   // Try DD-MM-YYYY or DD/MM/YYYY (e.g. 14/12/2023, 01-01-2024)
@@ -273,7 +273,7 @@ function parseDate(str) {
       day = a;
       mon = b - 1;
     }
-    if (!isNaN(day) && !isNaN(mon) && !isNaN(yr)) return new Date(yr, mon, day);
+    if (!isNaN(day) && !isNaN(mon) && !isNaN(yr)) return new Date(Date.UTC(yr, mon, day));
   }
 
   // Try YYYY-MM-DD
@@ -282,7 +282,7 @@ function parseDate(str) {
     const yr = parseInt(isoMatch[1], 10);
     const mon = parseInt(isoMatch[2], 10) - 1;
     const day = parseInt(isoMatch[3], 10);
-    if (!isNaN(day) && !isNaN(mon) && !isNaN(yr)) return new Date(yr, mon, day);
+    if (!isNaN(day) && !isNaN(mon) && !isNaN(yr)) return new Date(Date.UTC(yr, mon, day));
   }
 
   // Fallback: let JS parse it (handles 'Monday, January 1, 2024' etc.)
@@ -410,13 +410,13 @@ const listProjection = {
   dateOfEnquiry: 1, dateOfRegistration: 1, dateOfAdmission: 1
 };
 
-// ─── Helper: parse YYYY-MM-DD string to local midnight ───
+// ─── Helper: parse YYYY-MM-DD string to UTC midnight ───
 function toLocalDate(str) {
   const parts = str.split('-');
   if (parts.length === 3) {
-    return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    return new Date(Date.UTC(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])));
   }
-  return new Date(str);
+  return new Date(str + 'T00:00:00Z');
 }
 
 // ─── Helper: build date filter and optional extra filters ───
@@ -664,7 +664,8 @@ app.get('/api/count', auth, async (req, res) => {
 // ─── Migrate: backfill parsed dates for old records ───
 app.post('/api/migrate-dates', auth, adminOnly, async (req, res) => {
   try {
-    const students = await Student.find({ enquiryDateParsed: { $exists: false } }, { dateOfEnquiry: 1, dateOfRegistration: 1, dateOfAdmission: 1 }).lean();
+    // Re-parse ALL records (force=true) to fix timezone issues
+    const students = await Student.find({}, { dateOfEnquiry: 1, dateOfRegistration: 1, dateOfAdmission: 1 }).lean();
     let updated = 0;
     for (const s of students) {
       await Student.updateOne({ _id: s._id }, {
