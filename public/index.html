@@ -492,6 +492,40 @@ tbody tr{transition:background .1s;}
 
   </div><!-- /admin-grid -->
 
+  <!-- ── Razorpay Payment Reports ── -->
+  <div class="section-card admin-only" id="razorpaySection" style="display:none;">
+    <div class="section-header">
+      <div class="section-title">
+        <span class="icon" style="background:#fff7ed;color:#ea580c;">💳</span>
+        Razorpay Payment Reports
+      </div>
+      <span id="rzpStatus" style="font-size:12px;font-weight:600;"></span>
+    </div>
+    <div class="section-body">
+      <p style="color:var(--text-muted);font-size:12px;margin-bottom:16px;">
+        Upload one or two Razorpay Excel / CSV reports. The system will auto-detect columns and extract:
+        <strong>Payment Page Title, Payment Date, Order ID, Payment ID, Name, Email, Phone</strong>.
+      </p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px;">
+        <div>
+          <label style="display:block;margin-bottom:6px;">📄 Report 1</label>
+          <input type="file" id="rzpFile1" accept=".xlsx,.xls,.csv">
+        </div>
+        <div>
+          <label style="display:block;margin-bottom:6px;">📄 Report 2 <span style="font-weight:400;color:var(--text-muted);">(optional)</span></label>
+          <input type="file" id="rzpFile2" accept=".xlsx,.xls,.csv">
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px;">
+        <button onclick="processRazorpayReports()" style="background:#ea580c;">⚡ Process Reports</button>
+        <button class="btn-success hidden" id="rzpDownloadBtn" onclick="downloadRazorpayExcel()">⬇ Download Excel</button>
+        <button class="btn-ghost btn-sm hidden" id="rzpClearBtn" onclick="clearRazorpayReports()">✕ Clear</button>
+      </div>
+      <div id="rzpColumnInfo" style="display:none;margin:10px 0;padding:10px 14px;background:var(--accent-subtle);border:1px solid var(--accent-light);border-radius:var(--radius);font-size:11px;color:var(--text-secondary);line-height:1.8;"></div>
+      <div id="rzpTableWrap" style="margin-top:12px;"></div>
+    </div>
+  </div>
+
 </div><!-- /viewAdmin -->
 
 <!-- ═══════════ COMPARE VIEW ═══════════ -->
@@ -1234,6 +1268,319 @@ async function deleteUser(id,email){
     await authFetch('/api/users/'+id,{method:'DELETE'});
     loadUserList();
   }catch(e){alert('Failed to delete user');}
+}
+
+// ══════════════════════════════════════════════════════
+// ─── Razorpay Payment Report Automation ───────────────
+// ══════════════════════════════════════════════════════
+
+let rzpAllRows = [];
+
+/**
+ * Flexible column finder — tries exact normalized match first,
+ * then "contains" match. Handles spaces, underscores, case, etc.
+ */
+function findRzpCol(headers, ...candidates) {
+  const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const hNorm = headers.map(h => ({ orig: h, n: norm(h) }));
+  // Pass 1 — exact normalized match
+  for (const c of candidates) {
+    const cn = norm(c);
+    const found = hNorm.find(h => h.n === cn);
+    if (found) return found.orig;
+  }
+  // Pass 2 — header contains candidate token (or vice-versa)
+  for (const c of candidates) {
+    const cn = norm(c);
+    const found = hNorm.find(h => h.n.includes(cn) || cn.includes(h.n));
+    if (found) return found.orig;
+  }
+  return null;
+}
+
+/**
+ * Parse a single Razorpay workbook — auto-detects relevant columns.
+ * Returns { rows, colMap } where colMap shows what was detected.
+ */
+function parseRzpWorkbook(workbook) {
+  // Use the first sheet
+  const sheetName = workbook.SheetNames[0];
+  const ws = workbook.Sheets[sheetName];
+  // cellDates already applied at read time; use raw to format later
+  const data = XLSX.utils.sheet_to_json(ws, { defval: '' });
+  if (!data.length) return { rows: [], colMap: {} };
+
+  const headers = Object.keys(data[0]);
+
+  // Column candidates (ordered by Razorpay's standard naming)
+  const colTitle  = findRzpCol(headers,
+    'payment page title','payment link title','page title','payment link description','description','title','payment link name','remarks');
+  const colDate   = findRzpCol(headers,
+    'payment date','authorized at','created at','paid at','transaction date','date','settlement date','captured at');
+  const colOrder  = findRzpCol(headers,
+    'order id','order_id','razorpay order id','merchant order id','reference id');
+  const colPayId  = findRzpCol(headers,
+    'payment id','payment_id','razorpay payment id','transaction id','txn id','id');
+  const colName   = findRzpCol(headers,
+    'customer name','payer name','name','contact name','buyer name','full name');
+  const colEmail  = findRzpCol(headers,
+    'customer email','email id','email','payer email','buyer email');
+  const colPhone      = findRzpCol(headers,
+    'customer contact','contact','phone','mobile','phone number','mobile number','customer phone','payer phone');
+  // Settlement columns (typically in the settlements / reconciliation export)
+  const colEntityId    = findRzpCol(headers,
+    'entity_id','entity id','payment entity id');
+  const colSettleUTR   = findRzpCol(headers,
+    'settlement_utr','settlement utr','utr','utr number','utr no');
+  const colSettleId    = findRzpCol(headers,
+    'settlement_id','settlement id','settled by','settlement batch id','batch id');
+  const colSettledAt   = findRzpCol(headers,
+    'settled_at','settled at','settlement date','settlement time');
+  const colAddlUTR     = findRzpCol(headers,
+    'additional_utr','additional utr','additional utr number');
+
+  const colMap = {
+    'Payment Page Title': colTitle     || '—not found—',
+    'Payment Date':       colDate      || '—not found—',
+    'Order ID':           colOrder     || '—not found—',
+    'Payment ID':         colPayId     || '—not found—',
+    'Name':               colName      || '—not found—',
+    'Email':              colEmail     || '—not found—',
+    'Phone':              colPhone     || '—not found—',
+    'Entity ID (join)':   colEntityId  || '—not found—',
+    'Settlement UTR':     colSettleUTR || '—not found—',
+    'Settlement ID':      colSettleId  || '—not found—',
+    'Settled At':         colSettledAt || '—not found—',
+    'Additional UTR':     colAddlUTR   || '—not found—',
+  };
+
+  const rows = data.map(row => {
+    // Format dates that XLSX parsed as Date objects
+    const rawDate = colDate ? row[colDate] : '';
+    let payDate = '';
+    if (rawDate instanceof Date) {
+      payDate = rawDate.toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
+    } else {
+      payDate = String(rawDate || '');
+    }
+
+    return {
+      'Payment Page Title': colTitle     ? String(row[colTitle]     || '').trim() : '',
+      'Payment Date':       payDate,
+      'Order ID':           colOrder     ? String(row[colOrder]     || '').trim() : '',
+      'Payment ID':         colPayId     ? String(row[colPayId]     || '').trim() : '',
+      'Name':               colName      ? String(row[colName]      || '').trim() : '',
+      'Email':              colEmail     ? String(row[colEmail]     || '').trim() : '',
+      'Phone':              colPhone     ? String(row[colPhone]     || '').trim() : '',
+      // Settlement fields
+      '_entityId':          colEntityId  ? String(row[colEntityId]  || '').trim() : '',
+      'Settlement UTR':     colSettleUTR ? String(row[colSettleUTR] || '').trim() : '',
+      'Settlement ID':      colSettleId  ? String(row[colSettleId]  || '').trim() : '',
+      'Settled At':         colSettledAt ? (() => { const v = row[colSettledAt]; return v instanceof Date ? v.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) : String(v||'').trim(); })() : '',
+      'Additional UTR':     colAddlUTR   ? String(row[colAddlUTR]   || '').trim() : '',
+    };
+  });
+
+  return { rows, colMap };
+}
+
+/** Read a File → XLSX workbook (Promise) */
+function readAsWorkbook(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array', cellDates: true });
+        resolve(wb);
+      } catch(err) { reject(err); }
+    };
+    reader.onerror = () => reject(new Error('Could not read file: ' + file.name));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+async function processRazorpayReports() {
+  const file1 = document.getElementById('rzpFile1').files[0];
+  const file2 = document.getElementById('rzpFile2').files[0];
+  const statusEl = document.getElementById('rzpStatus');
+  const infoEl   = document.getElementById('rzpColumnInfo');
+
+  if (!file1 && !file2) {
+    alert('Please select at least one Razorpay report file (XLSX / XLS / CSV).');
+    return;
+  }
+
+  statusEl.textContent = 'Processing...';
+  statusEl.style.color = 'var(--warning-dark)';
+  infoEl.style.display = 'none';
+  document.getElementById('rzpDownloadBtn').classList.add('hidden');
+  document.getElementById('rzpClearBtn').classList.add('hidden');
+  showLoading('Processing Razorpay reports...');
+
+  try {
+    let allRows = [];
+    const colMaps = [];
+    const counts  = [];
+
+    let rows1 = [], rows2 = [];
+
+    if (file1) {
+      const wb1 = await readAsWorkbook(file1);
+      const { rows, colMap } = parseRzpWorkbook(wb1);
+      rows1 = rows;
+      colMaps.push({ file: file1.name, map: colMap });
+    }
+    if (file2) {
+      const wb2 = await readAsWorkbook(file2);
+      const { rows, colMap } = parseRzpWorkbook(wb2);
+      rows2 = rows;
+      colMaps.push({ file: file2.name, map: colMap });
+    }
+
+    // ── Settlement join ──────────────────────────────────────────
+    // Build a lookup map: entity_id → { Settlement UTR, Settlement ID, Settled At, Additional UTR }
+    // Scans BOTH files so it doesn't matter which file is payments vs settlements.
+    const settlementMap = {};
+    [...rows1, ...rows2].forEach(r => {
+      const key = r['_entityId'] || r['Payment ID']; // entity_id takes priority
+      if (key && (r['Settlement UTR'] || r['Settlement ID'] || r['Settled At'] || r['Additional UTR'])) {
+        settlementMap[key] = {
+          'Settlement UTR': r['Settlement UTR'],
+          'Settlement ID':  r['Settlement ID'],
+          'Settled At':     r['Settled At'],
+          'Additional UTR': r['Additional UTR'],
+        };
+      }
+    });
+
+    // Keep only rows that are proper payment rows (have Payment ID or Name).
+    // Then enrich with settlement data from the lookup map.
+    const enrichRow = r => {
+      const settle = settlementMap[r['Payment ID']] || {};
+      return {
+        ...r,
+        'Settlement UTR': r['Settlement UTR'] || settle['Settlement UTR'] || '',
+        'Settlement ID':  r['Settlement ID']  || settle['Settlement ID']  || '',
+        'Settled At':     r['Settled At']     || settle['Settled At']     || '',
+        'Additional UTR': r['Additional UTR'] || settle['Additional UTR'] || '',
+      };
+    };
+
+    const payRows1 = rows1.filter(r => r['Payment ID'] || r['Name']).map(enrichRow);
+    const payRows2 = rows2.filter(r => r['Payment ID'] || r['Name']).map(enrichRow);
+    allRows = [...payRows1, ...payRows2];
+
+    counts.push(...[
+      file1 ? { label: 'Report 1 ('+file1.name+')', count: payRows1.length } : null,
+      file2 ? { label: 'Report 2 ('+file2.name+')', count: payRows2.length } : null,
+    ].filter(Boolean));
+
+    const joinedCount = allRows.filter(r => r['Settlement UTR']).length;
+    if (Object.keys(settlementMap).length > 0) {
+      counts.push({ label: '✓ Settlement rows matched', count: joinedCount });
+    }
+
+    rzpAllRows = allRows;
+
+    // Build column detection info box
+    let infoHtml = '<strong>🔍 Column Mapping Detected:</strong><br>';
+    colMaps.forEach(cm => {
+      infoHtml += '<span style="color:var(--accent);font-weight:700;">'+cm.file+'</span> → ';
+      const parts = Object.entries(cm.map).map(([k,v]) =>
+        '<span title="'+k+'">'+(v==='—not found—'?'<span style="color:var(--danger);">'+k+': N/A</span>':'<span style="color:var(--success-dark);">'+k+': "'+v+'"</span>')+'</span>'
+      );
+      infoHtml += parts.join(' &bull; ') + '<br>';
+    });
+    infoEl.innerHTML = infoHtml;
+    infoEl.style.display = 'block';
+
+    renderRzpTable(allRows);
+
+    const countSummary = counts.map(c => c.label + ': <strong>'+c.count+'</strong>').join(' &nbsp;|&nbsp; ');
+    statusEl.innerHTML = '✓ Total: <strong>'+allRows.length+'</strong> payments — ' + countSummary;
+    statusEl.style.color = 'var(--success-dark)';
+
+    if (allRows.length > 0) {
+      document.getElementById('rzpDownloadBtn').classList.remove('hidden');
+    }
+    document.getElementById('rzpClearBtn').classList.remove('hidden');
+
+  } catch(e) {
+    statusEl.textContent = '✗ Error: ' + e.message;
+    statusEl.style.color = 'var(--danger)';
+    console.error('Razorpay parse error:', e);
+  } finally {
+    hideLoading();
+  }
+}
+
+function renderRzpTable(rows) {
+  const wrap = document.getElementById('rzpTableWrap');
+  if (!rows.length) {
+    wrap.innerHTML = '<div class="no-data">No data rows found in the uploaded file(s).</div>';
+    return;
+  }
+
+  const cols = ['#','Payment Page Title','Payment Date','Order ID','Payment ID','Name','Email','Phone','Settlement UTR','Settlement ID','Settled At','Additional UTR'];
+  const preview = rows.slice(0, 200);
+  let html = '<div class="table-wrap" style="max-height:420px;">';
+  html += '<table><thead><tr>' + cols.map(c => '<th>'+c+'</th>').join('') + '</tr></thead><tbody>';
+  preview.forEach((row, i) => {
+    const hasSett = row['Settlement UTR'] || row['Settlement ID'] || row['Settled At'] || row['Additional UTR'];
+    html += '<tr>';
+    html += '<td>'+(i+1)+'</td>';
+    html += '<td>'+(row['Payment Page Title']||'-')+'</td>';
+    html += '<td>'+(row['Payment Date']||'-')+'</td>';
+    html += '<td style="font-family:monospace;font-size:11px;">'+(row['Order ID']||'-')+'</td>';
+    html += '<td style="font-family:monospace;font-size:11px;">'+(row['Payment ID']||'-')+'</td>';
+    html += '<td style="font-weight:600;">'+(row['Name']||'-')+'</td>';
+    html += '<td>'+(row['Email']||'-')+'</td>';
+    html += '<td>'+(row['Phone']||'-')+'</td>';
+    html += '<td style="font-family:monospace;font-size:11px;color:'+(hasSett?'var(--success-dark)':'var(--text-muted)')+';">'+(row['Settlement UTR']||'-')+'</td>';
+    html += '<td style="font-family:monospace;font-size:11px;">'+(row['Settlement ID']||'-')+'</td>';
+    html += '<td>'+(row['Settled At']||'-')+'</td>';
+    html += '<td style="font-family:monospace;font-size:11px;">'+(row['Additional UTR']||'-')+'</td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+
+  if (rows.length > 200) {
+    html += '<p style="color:var(--text-muted);font-size:12px;margin-top:8px;padding-left:4px;">⚠ Showing first 200 of <strong>'+rows.length+'</strong> rows. Download Excel to see all.</p>';
+  }
+  wrap.innerHTML = html;
+}
+
+function downloadRazorpayExcel() {
+  if (!rzpAllRows.length) { alert('No data to download.'); return; }
+
+  const fieldCols = ['Payment Page Title','Payment Date','Order ID','Payment ID','Name','Email','Phone','Settlement UTR','Settlement ID','Settled At','Additional UTR'];
+  const headerRow = ['S.No', ...fieldCols];
+  const dataRows  = rzpAllRows.map((r, i) => [i+1, ...fieldCols.map(c => r[c] || '')]);
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([headerRow, ...dataRows]);
+
+  // Auto column widths
+  ws['!cols'] = headerRow.map((h, ci) => {
+    let max = h.length;
+    dataRows.forEach(r => { const l = String(r[ci]||'').length; if (l > max) max = l; });
+    return { wch: Math.min(max + 2, 45) };
+  });
+
+  XLSX.utils.book_append_sheet(wb, ws, 'Payments');
+  const fname = 'Razorpay_Payments_' + new Date().toISOString().slice(0,10) + '.xlsx';
+  XLSX.writeFile(wb, fname);
+}
+
+function clearRazorpayReports() {
+  rzpAllRows = [];
+  document.getElementById('rzpFile1').value = '';
+  document.getElementById('rzpFile2').value = '';
+  document.getElementById('rzpTableWrap').innerHTML = '';
+  document.getElementById('rzpColumnInfo').style.display = 'none';
+  document.getElementById('rzpStatus').textContent = '';
+  document.getElementById('rzpDownloadBtn').classList.add('hidden');
+  document.getElementById('rzpClearBtn').classList.add('hidden');
 }
 
 // ─── Comparison Feature ───
