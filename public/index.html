@@ -328,8 +328,8 @@ tbody tr{transition:background .1s;}
     <button class="nav-link active" id="navDashboard" onclick="switchView('dashboard')">Dashboard</button>
     <button class="nav-link" id="navCompare" onclick="switchView('compare')">Compare</button>
     <button class="nav-link admin-only" id="navAdmin" onclick="switchView('admin')" style="display:none;">Admin Panel</button>
+    <button class="nav-link admin-only" onclick="window.open('https://automation-vfze.onrender.com/','_blank')" style="display:none;background:rgba(234,88,12,0.18);color:#fb923c;">⚡ Automation</button>
   </div>
-  <button class="nav-link admin-only" onclick="window.open('https://automation-vfze.onrender.com/','_blank')" style="display:none;background:rgba(234,88,12,0.18);color:#fb923c;">⚡ Automation</button>
   <div class="nav-right">
     <div class="nav-user">
       <div class="nav-avatar" id="navAvatar">A</div>
@@ -492,6 +492,102 @@ tbody tr{transition:background .1s;}
     </div>
 
   </div><!-- /admin-grid -->
+
+  <!-- ── Meritto Integration ── -->
+  <div class="section-card admin-only" id="merittoSection" style="display:none;">
+    <div class="section-header">
+      <div class="section-title">
+        <span class="icon" style="background:#ede9fe;color:#7c3aed;">🔗</span>
+        Meritto Integration
+      </div>
+      <span id="merittoStatus" style="font-size:12px;font-weight:600;color:var(--text-muted);">Loading...</span>
+    </div>
+    <div class="section-body">
+      <p style="color:var(--text-muted);font-size:12px;margin-bottom:16px;">
+        Give these details to the Meritto team. They will call the webhook URL every time a student record is created or updated.
+      </p>
+
+      <!-- Webhook URL + Secret -->
+      <div style="display:grid;gap:12px;margin-bottom:20px;">
+        <div style="background:var(--bg);border:1.5px solid var(--border);border-radius:var(--radius);padding:14px 16px;">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:6px;">📡 Webhook Endpoint (POST)</div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <code id="merittoUrl" style="flex:1;font-size:13px;font-weight:600;color:var(--accent);word-break:break-all;"></code>
+            <button class="btn-sm btn-outline" onclick="copyMerittoUrl()">Copy</button>
+          </div>
+        </div>
+        <div style="background:var(--bg);border:1.5px solid var(--border);border-radius:var(--radius);padding:14px 16px;">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:6px;">🔑 Secret Token (send in header: <code>X-Meritto-Secret</code>)</div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <code id="merittoSecret" style="flex:1;font-size:13px;font-weight:600;color:var(--danger);word-break:break-all;"></code>
+            <button class="btn-sm btn-outline" onclick="copyMerittoSecret()">Copy</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Required Fields table -->
+      <div style="font-size:12px;font-weight:700;color:var(--text-secondary);margin-bottom:8px;">📋 Fields to send in JSON body (all optional except name):</div>
+      <div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <thead>
+            <tr style="background:var(--primary-light);">
+              <th style="padding:9px 14px;text-align:left;color:#e2e8f0;font-size:11px;text-transform:uppercase;letter-spacing:0.4px;">Field Name</th>
+              <th style="padding:9px 14px;text-align:left;color:#e2e8f0;font-size:11px;text-transform:uppercase;letter-spacing:0.4px;">Example Value</th>
+              <th style="padding:9px 14px;text-align:left;color:#e2e8f0;font-size:11px;text-transform:uppercase;letter-spacing:0.4px;">Notes</th>
+            </tr>
+          </thead>
+          <tbody id="merittoFieldsTable">
+            <tr><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"><code>name</code></td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);">Ravi Sharma</td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);color:var(--danger);font-weight:600;">Required</td></tr>
+            <tr style="background:var(--bg);"><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"><code>first_name</code> / <code>last_name</code></td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);">Ravi / Sharma</td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);">Alternative to name</td></tr>
+            <tr><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"><code>email</code></td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);">ravi@example.com</td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);">Used for upsert match</td></tr>
+            <tr style="background:var(--bg);"><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"><code>mobile</code></td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);">9876543210</td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"></td></tr>
+            <tr><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"><code>lead_id</code> / <code>application_id</code></td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);">MRT-20260001</td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);">Stored as Student ID</td></tr>
+            <tr style="background:var(--bg);"><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"><code>course_name</code></td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);">B.Tech CSE</td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"></td></tr>
+            <tr><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"><code>course_type</code></td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);">UG</td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"></td></tr>
+            <tr style="background:var(--bg);"><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"><code>campus</code> / <code>center_name</code></td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);">GEU Dehradun</td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"></td></tr>
+            <tr><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"><code>lead_stage</code> / <code>status</code></td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);">enquiry / registration / admission</td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);">Controls date type</td></tr>
+            <tr style="background:var(--bg);"><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"><code>date_of_enquiry</code> / <code>enquiry_date</code></td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);">2026-01-15</td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);">YYYY-MM-DD preferred</td></tr>
+            <tr><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"><code>date_of_registration</code></td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);">2026-02-10</td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"></td></tr>
+            <tr style="background:var(--bg);"><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"><code>date_of_admission</code></td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);">2026-03-01</td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"></td></tr>
+            <tr><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"><code>gender</code></td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);">Male / Female</td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"></td></tr>
+            <tr style="background:var(--bg);"><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"><code>state</code> / <code>city</code></td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);">Uttarakhand / Dehradun</td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"></td></tr>
+            <tr><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"><code>father_name</code></td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);">Suresh Sharma</td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"></td></tr>
+            <tr style="background:var(--bg);"><td style="padding:8px 14px;"><code>intake</code> / <code>academic_year</code></td><td style="padding:8px 14px;">2026</td><td style="padding:8px 14px;"></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Sample payload -->
+      <details style="margin-top:14px;">
+        <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--accent);">📎 Sample JSON payload (click to expand)</summary>
+        <pre style="margin-top:8px;background:var(--primary);color:#e2e8f0;padding:14px;border-radius:var(--radius);font-size:11px;overflow-x:auto;line-height:1.6;">{
+  "lead_id": "MRT-20260001",
+  "name": "Ravi Sharma",
+  "email": "ravi.sharma@example.com",
+  "mobile": "9876543210",
+  "course_name": "B.Tech CSE",
+  "course_type": "UG",
+  "campus": "GEU Dehradun",
+  "lead_stage": "admission",
+  "date_of_enquiry": "2026-01-15",
+  "date_of_registration": "2026-02-10",
+  "date_of_admission": "2026-03-01",
+  "gender": "Male",
+  "father_name": "Suresh Sharma",
+  "state": "Uttarakhand",
+  "city": "Dehradun",
+  "intake": "2026"
+}</pre>
+      </details>
+
+      <!-- Sync stats -->
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--border);">
+        <div id="merittoCount" style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:var(--purple-light);border:1px solid #c4b5fd;border-radius:20px;font-size:14px;font-weight:700;color:var(--purple-dark);">— records from Meritto</div>
+        <div id="merittoLastSync" style="font-size:12px;color:var(--text-muted);font-weight:500;"></div>
+        <button class="btn-sm btn-ghost" onclick="loadMerittoInfo()">🔄 Refresh</button>
+      </div>
+    </div>
+  </div>
 
   <!-- ── Razorpay Payment Reports ── -->
   <div class="section-card admin-only" id="razorpaySection" style="display:none;">
@@ -720,7 +816,7 @@ function showDashboard(role, name){
   switchView('dashboard');
 
   loadDBCount();
-  if(role==='admin') loadUserList();
+  if(role==='admin'){ loadUserList(); loadMerittoInfo(); }
 }
 
 // ─── View Switching (Dashboard vs Compare vs Admin Panel) ───
@@ -1582,6 +1678,38 @@ function clearRazorpayReports() {
   document.getElementById('rzpStatus').textContent = '';
   document.getElementById('rzpDownloadBtn').classList.add('hidden');
   document.getElementById('rzpClearBtn').classList.add('hidden');
+}
+
+// ─── Meritto Integration (Admin) ───
+async function loadMerittoInfo(){
+  const statusEl = document.getElementById('merittoStatus');
+  try{
+    const r = await authFetch('/api/meritto/info');
+    const d = await r.json();
+
+    const baseUrl = window.location.origin;
+    const fullUrl = baseUrl + d.webhookPath;
+    document.getElementById('merittoUrl').textContent    = fullUrl;
+    document.getElementById('merittoSecret').textContent = d.secret;
+    document.getElementById('merittoCount').textContent  = d.totalRecords + ' records from Meritto';
+    document.getElementById('merittoLastSync').textContent =
+      d.lastReceived ? 'Last received: ' + new Date(d.lastReceived).toLocaleString('en-IN') : 'No data received yet';
+
+    statusEl.textContent = d.totalRecords > 0 ? '✓ Active' : 'Waiting for data';
+    statusEl.style.color = d.totalRecords > 0 ? 'var(--success-dark)' : 'var(--text-muted)';
+  }catch(e){
+    statusEl.textContent = '✗ Error loading info';
+    statusEl.style.color = 'var(--danger)';
+  }
+}
+
+function copyMerittoUrl(){
+  const v = document.getElementById('merittoUrl').textContent;
+  navigator.clipboard.writeText(v).then(()=>alert('Webhook URL copied!'));
+}
+function copyMerittoSecret(){
+  const v = document.getElementById('merittoSecret').textContent;
+  navigator.clipboard.writeText(v).then(()=>alert('Secret token copied!'));
 }
 
 // ─── Comparison Feature ───

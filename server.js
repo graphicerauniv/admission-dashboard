@@ -18,6 +18,11 @@ const JWT_SECRET = process.env.JWT_SECRET || 'default-secret-change-me';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@geu.ac.in';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Admin@123';
 
+// ─── Meritto Integration ───
+// Generate a stable secret if not set: hash of JWT_SECRET so it's deterministic
+const MERITTO_SECRET = process.env.MERITTO_SECRET ||
+  crypto.createHash('sha256').update((process.env.JWT_SECRET || 'default-secret-change-me') + '-meritto').digest('hex').slice(0, 32);
+
 // ─── MongoDB Connection ───
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/admission_dashboard';
 mongoose.connect(MONGO_URI).then(() => console.log('MongoDB connected')).catch(e => { console.error('MongoDB error:', e); process.exit(1); });
@@ -775,6 +780,146 @@ app.post('/api/migrate-dates', auth, adminOnly, async (req, res) => {
       updated++;
     }
     res.json({ migrated: updated });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+// ─── Meritto Webhook: POST /api/meritto/webhook ────────────────
+// Meritto calls this endpoint to push student records.
+// Auth: pass the secret as header  X-Meritto-Secret: <token>
+//       OR as query param          ?secret=<token>
+// Accepts a single object OR an array of objects.
+// ══════════════════════════════════════════════════════════════
+app.post('/api/meritto/webhook', async (req, res) => {
+  try {
+    // Verify secret
+    const provided = req.headers['x-meritto-secret'] || req.query.secret || '';
+    if (provided !== MERITTO_SECRET) {
+      return res.status(401).json({ error: 'Invalid secret token' });
+    }
+
+    const payload = req.body;
+    const items = Array.isArray(payload) ? payload : [payload];
+    if (!items.length) return res.status(400).json({ error: 'Empty payload' });
+
+    // Flexible field getter — tries exact then case-insensitive
+    const get = (obj, ...keys) => {
+      for (const k of keys) {
+        if (obj[k] !== undefined && obj[k] !== null && obj[k] !== '') return String(obj[k]).trim();
+      }
+      const lower = Object.fromEntries(Object.entries(obj).map(([k, v]) => [k.toLowerCase().replace(/[^a-z0-9]/g, ''), v]));
+      for (const k of keys) {
+        const nk = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (lower[nk] !== undefined && lower[nk] !== null && lower[nk] !== '') return String(lower[nk]).trim();
+      }
+      return '';
+    };
+
+    const batchId = 'meritto_' + Date.now();
+    let created = 0, updated = 0, skipped = 0;
+
+    for (const item of items) {
+      const firstName  = get(item, 'first_name', 'firstName');
+      const lastName   = get(item, 'last_name', 'lastName');
+      const name       = get(item, 'name', 'full_name', 'fullName', 'student_name', 'studentName')
+                         || [firstName, lastName].filter(Boolean).join(' ');
+      if (!name) { skipped++; continue; }
+
+      const email  = get(item, 'email', 'email_id', 'emailId').toLowerCase();
+      const mobile = get(item, 'mobile', 'phone', 'contact', 'mobile_number', 'phone_number');
+
+      // Campus / center
+      const campus          = get(item, 'campus', 'center', 'centre', 'campus_name', 'center_name');
+      const enquiredCenter  = get(item, 'enquired_center', 'enquiry_center', 'enquiredCenter') || campus;
+      const registeredCenter = get(item, 'registered_center', 'registeredCenter') || campus;
+      const admittedCenter  = get(item, 'admitted_center', 'admittedCenter') || campus;
+
+      // Dates
+      const dateOfEnquiry      = get(item, 'date_of_enquiry', 'enquiry_date', 'enquiryDate', 'lead_date', 'created_at', 'createdAt');
+      const dateOfRegistration = get(item, 'date_of_registration', 'registration_date', 'registrationDate');
+      const dateOfAdmission    = get(item, 'date_of_admission', 'admission_date', 'admissionDate');
+
+      // Status — map Meritto lead stages to our schema values
+      const rawStatus = get(item, 'status', 'lead_stage', 'leadStage', 'application_status', 'applicationStatus', 'stage');
+      const statusMap = { enquiry:'Enquiry', enquired:'Enquiry', lead:'Enquiry', new:'Enquiry',
+                          registration:'Registered', registered:'Registered',
+                          admission:'Admitted', admitted:'Admitted', confirm:'Admitted', confirmed:'Admitted' };
+      const applicationStatus = statusMap[(rawStatus||'').toLowerCase()] || rawStatus || 'Enquiry';
+
+      // Determine date field from status for parsedDate
+      const dateOfEnquiryFinal      = dateOfEnquiry || (applicationStatus === 'Enquiry' ? new Date().toISOString().slice(0,10) : '');
+      const dateOfRegistrationFinal = dateOfRegistration || (applicationStatus === 'Registered' ? new Date().toISOString().slice(0,10) : '');
+      const dateOfAdmissionFinal    = dateOfAdmission    || (applicationStatus === 'Admitted'    ? new Date().toISOString().slice(0,10) : '');
+
+      const record = {
+        studentId:            get(item, 'student_id', 'studentId', 'application_id', 'applicationId', 'lead_id', 'leadId', 'id'),
+        name,
+        email,
+        mobile,
+        gender:               get(item, 'gender'),
+        dob:                  get(item, 'dob', 'date_of_birth', 'dateOfBirth'),
+        fatherName:           get(item, 'father_name', 'fatherName'),
+        motherName:           get(item, 'mother_name', 'motherName'),
+        category:             get(item, 'category', 'caste_category', 'casteCategory'),
+        courseType:           get(item, 'course_type', 'courseType', 'program_type', 'programType'),
+        courseName:           get(item, 'course_name', 'courseName', 'program', 'program_name', 'programName', 'course'),
+        intake:               get(item, 'intake', 'batch', 'academic_year', 'academicYear', 'year'),
+        applicationStatus,
+        campus,
+        enquiredCenter,
+        registeredCenter,
+        admittedCenter,
+        dateOfEnquiry:        dateOfEnquiryFinal,
+        dateOfRegistration:   dateOfRegistrationFinal,
+        dateOfAdmission:      dateOfAdmissionFinal,
+        enquiryDateParsed:    parseDate(dateOfEnquiryFinal),
+        registrationDateParsed: parseDate(dateOfRegistrationFinal),
+        admissionDateParsed:  parseDate(dateOfAdmissionFinal),
+        state:                get(item, 'state', 'permanent_state'),
+        city:                 get(item, 'city', 'permanent_city'),
+        district:             get(item, 'district', 'permanent_district'),
+        pincode:              get(item, 'pincode', 'pin_code', 'zip'),
+        address:              get(item, 'address', 'permanent_address'),
+        nationality:          get(item, 'nationality'),
+        religion:             get(item, 'religion'),
+        bloodGroup:           get(item, 'blood_group', 'bloodGroup'),
+        aadhar:               get(item, 'aadhar', 'aadhaar', 'aadhar_no', 'aadhaar_no'),
+        uploadBatch:          batchId,
+        rawData:              item
+      };
+
+      // Upsert by email (if has email) or studentId
+      const matchKey = email ? { email } : record.studentId ? { studentId: record.studentId } : null;
+      if (matchKey) {
+        const result = await Student.updateOne(matchKey, { $set: record }, { upsert: true });
+        if (result.upsertedCount > 0) created++; else updated++;
+      } else {
+        await Student.create(record);
+        created++;
+      }
+    }
+
+    console.log(`Meritto webhook: created=${created} updated=${updated} skipped=${skipped}`);
+    res.json({ success: true, received: items.length, created, updated, skipped });
+  } catch (err) {
+    console.error('Meritto webhook error:', err);
+    res.status(500).json({ error: 'Webhook failed: ' + err.message });
+  }
+});
+
+// ─── Meritto Info (admin) — returns webhook URL + secret + stats ───
+app.get('/api/meritto/info', auth, adminOnly, async (req, res) => {
+  try {
+    const count = await Student.countDocuments({ uploadBatch: /^meritto_/ });
+    const last  = await Student.findOne({ uploadBatch: /^meritto_/ }, { createdAt: 1 }).sort({ createdAt: -1 }).lean();
+    res.json({
+      secret:       MERITTO_SECRET,
+      webhookPath:  '/api/meritto/webhook',
+      totalRecords: count,
+      lastReceived: last ? last.createdAt : null
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
