@@ -175,6 +175,7 @@ const studentSchema = new mongoose.Schema({
   courseType: String,
   courseName: String,
   studentId: String,
+  leadId: String,  // ← Meritto lead_id for webhook deduplication
   name: String,
   fatherName: String,
   email: String,
@@ -236,6 +237,7 @@ studentSchema.index({ enquiredCenter: 1 });
 studentSchema.index({ registeredCenter: 1 });
 studentSchema.index({ admittedCenter: 1 });
 studentSchema.index({ campus: 1 });
+studentSchema.index({ leadId: 1 });  // ← Index for fast lead_id lookups
 
 const Student = mongoose.model('Student', studentSchema);
 
@@ -787,7 +789,14 @@ app.post('/api/migrate-dates', auth, adminOnly, async (req, res) => {
 
 // ══════════════════════════════════════════════════════════════
 // ─── Meritto Webhook: POST /api/meritto/webhook ────────────────
-// Meritto calls this endpoint to push student records.
+// Meritto calls this endpoint 3 times per student:
+//   1️⃣  Date of Inquiry    → dateOfEnquiry (initial lead)
+//   2️⃣  Date of Registration → dateOfRegistration (student registers)
+//   3️⃣  Date of Admission   → dateOfAdmission (student admitted)
+//
+// All 3 calls use the same lead_id, which groups them as ONE student record.
+// Each call upserts by lead_id, so the DB progressively updates the journey.
+//
 // Auth: pass the secret as header  X-Meritto-Secret: <token>
 //       OR as query param          ?secret=<token>
 // Accepts a single object OR an array of objects.
@@ -854,7 +863,8 @@ app.post('/api/meritto/webhook', async (req, res) => {
       const dateOfAdmissionFinal    = dateOfAdmission    || (applicationStatus === 'Admitted'    ? new Date().toISOString().slice(0,10) : '');
 
       const record = {
-        studentId:            get(item, 'student_id', 'studentId', 'application_id', 'applicationId', 'lead_id', 'leadId', 'id'),
+        leadId:               get(item, 'lead_id', 'leadId', 'lead_ID', 'lead ID'),  // ← Primary key for all 3 webhook hits
+        studentId:            get(item, 'student_id', 'studentId', 'application_id', 'applicationId', 'id'),
         name,
         email,
         mobile,
@@ -890,12 +900,13 @@ app.post('/api/meritto/webhook', async (req, res) => {
         rawData:              item
       };
 
-      // Upsert by email (if has email) or studentId
-      const matchKey = email ? { email } : record.studentId ? { studentId: record.studentId } : null;
-      if (matchKey) {
-        const result = await Student.updateOne(matchKey, { $set: record }, { upsert: true });
+      // Upsert by lead_id (all 3 webhook hits use this)
+      const leadId = record.leadId;
+      if (leadId) {
+        const result = await Student.updateOne({ leadId }, { $set: record }, { upsert: true });
         if (result.upsertedCount > 0) created++; else updated++;
       } else {
+        // Fallback: if no lead_id, create new record (shouldn't happen with proper Meritto setup)
         await Student.create(record);
         created++;
       }
