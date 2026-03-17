@@ -297,6 +297,45 @@ function parseDate(str) {
   return isNaN(fallback.getTime()) ? null : fallback;
 }
 
+// ─── Helper: normalize campus names to standard DB codes ───
+// Meritto sends: GEHUDDN, GEHUHLD, GEHUBTL, GEU
+// Old CSV data has: GEHU - DEHRADUN, GEHU - HALDWANI, GEHU - BHIMTAL, GEU Dehradun
+// This function maps ALL variations to a single code
+function normalizeCampus(raw) {
+  if (!raw) return '';
+  const val = raw.trim().toLowerCase().replace(/[\s\-–—]+/g, ' ');
+
+  // GEU / GEU Dehradun → GEU
+  if (/^geu(\s+dehradun)?$/.test(val) || val === 'geu dehradun') return 'GEU';
+
+  // GEHUDDN / GEHU Dehradun / GEHU - Dehradun → GEHUDDN
+  if (val === 'gehuddn' || /gehu.*dehradun/.test(val) || val === 'grhu dehradun' || val === 'grhu dehardun') return 'GEHUDDN';
+
+  // GEHUHLD / GEHU Haldwani / GEHU - Haldwani → GEHUHLD
+  if (val === 'gehuhld' || /gehu.*haldwani/.test(val)) return 'GEHUHLD';
+
+  // GEHUBTL / GEHU Bhimtal / GEHU - Bhimtal → GEHUBTL
+  if (val === 'gehubtl' || /gehu.*bhimtal/.test(val)) return 'GEHUBTL';
+
+  // Plain "GEHU" without city
+  if (/^gehu$/.test(val)) return 'GEHU';
+
+  return raw.trim();
+}
+
+// ─── Helper: convert DB codes to readable campus names for display ───
+function displayCampus(code) {
+  if (!code) return '';
+  const map = {
+    'GEU': 'GEU',
+    'GEHUDDN': 'GEHU - DEHRADUN',
+    'GEHUHLD': 'GEHU - HALDWANI',
+    'GEHUBTL': 'GEHU - BHIMTAL',
+    'GEHU': 'GEHU'
+  };
+  return map[code] || code;
+}
+
 // ─── Upload CSV to MongoDB (ADMIN ONLY) ───
 app.post('/api/upload', auth, adminOnly, upload_mem.single('csvFile'), async (req, res) => {
   try {
@@ -430,9 +469,12 @@ function toLocalDate(str) {
 function buildDateFilter(dateField, start, end, extra) {
   const q = { [dateField]: { $gte: start, $lte: end } };
   if (extra.campus) {
+    // Normalize: handles both display names ("GEHU - HALDWANI") and codes ("GEHUHLD")
+    const campusCode = normalizeCampus(extra.campus);
+
     // "GEHU" matches all GEHU campuses (Dehradun, Bhimtal, Haldwani)
-    if (extra.campus.toUpperCase() === 'GEHU') {
-      const gehuRe = { $regex: /gehu/i };
+    if (campusCode === 'GEHU') {
+      const gehuRe = { $regex: /^GEHU/ };
       q.$or = [
         { enquiredCenter: gehuRe },
         { registeredCenter: gehuRe },
@@ -441,10 +483,10 @@ function buildDateFilter(dateField, start, end, extra) {
       ];
     } else {
       q.$or = [
-        { enquiredCenter: extra.campus },
-        { registeredCenter: extra.campus },
-        { admittedCenter: extra.campus },
-        { campus: extra.campus }
+        { enquiredCenter: campusCode },
+        { registeredCenter: campusCode },
+        { admittedCenter: campusCode },
+        { campus: campusCode }
       ];
     }
   }
@@ -482,7 +524,7 @@ const mapDoc = (s, campusField, dateStrField) => ({
   email: s.email,
   state: s.state,
   category: s.category,
-  campus: s[campusField] || s.campus || '',
+  campus: displayCampus(s[campusField] || s.campus || ''),
   dateStr: s[dateStrField] || ''
 });
 
@@ -504,9 +546,12 @@ app.get('/api/students', auth, async (req, res) => {
       Student.distinct('enquiredCenter').then(a =>
         Student.distinct('registeredCenter').then(b =>
           Student.distinct('admittedCenter').then(c =>
-            Student.distinct('campus').then(d =>
-              [...new Set([...a, ...b, ...c, ...d])].filter(Boolean).sort()
-            )
+            Student.distinct('campus').then(d => {
+              // Normalize all to codes, deduplicate, then convert to readable names
+              const allRaw = [...a, ...b, ...c, ...d].filter(Boolean);
+              const codes = [...new Set(allRaw.map(normalizeCampus))].filter(Boolean);
+              return codes.map(displayCampus).sort();
+            })
           )
         )
       ),
@@ -640,6 +685,10 @@ app.get('/api/student/:id', auth, async (req, res) => {
   try {
     const s = await Student.findById(req.params.id).lean();
     if (!s) return res.status(404).json({ error: 'Student not found' });
+    s.campus = displayCampus(s.campus);
+    s.enquiredCenter = displayCampus(s.enquiredCenter);
+    s.registeredCenter = displayCampus(s.registeredCenter);
+    s.admittedCenter = displayCampus(s.admittedCenter);
     res.json(s);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -761,6 +810,53 @@ app.get('/api/compare/export', auth, async (req, res) => {
     });
   } catch (err) {
     console.error('Compare export error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Migrate: normalize all campus names to DB codes ───
+app.post('/api/migrate-campus', auth, adminOnly, async (req, res) => {
+  try {
+    const students = await Student.find({}, { campus: 1, enquiredCenter: 1, registeredCenter: 1, admittedCenter: 1 }).lean();
+    let updated = 0;
+
+    for (const s of students) {
+      const updates = {};
+      let hasChanges = false;
+
+      // Normalize each campus field
+      const normCampus = normalizeCampus(s.campus);
+      if (normCampus !== s.campus && normCampus) {
+        updates.campus = normCampus;
+        hasChanges = true;
+      }
+
+      const normEnquired = normalizeCampus(s.enquiredCenter);
+      if (normEnquired !== s.enquiredCenter && normEnquired) {
+        updates.enquiredCenter = normEnquired;
+        hasChanges = true;
+      }
+
+      const normRegistered = normalizeCampus(s.registeredCenter);
+      if (normRegistered !== s.registeredCenter && normRegistered) {
+        updates.registeredCenter = normRegistered;
+        hasChanges = true;
+      }
+
+      const normAdmitted = normalizeCampus(s.admittedCenter);
+      if (normAdmitted !== s.admittedCenter && normAdmitted) {
+        updates.admittedCenter = normAdmitted;
+        hasChanges = true;
+      }
+
+      if (hasChanges) {
+        await Student.updateOne({ _id: s._id }, { $set: updates });
+        updated++;
+      }
+    }
+
+    res.json({ migrated: updated, total: students.length, message: `Normalized ${updated} records to use campus codes` });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
