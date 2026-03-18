@@ -728,15 +728,15 @@ app.get('/api/count', auth, async (req, res) => {
   }
 });
 
-// ─── Year-over-Year Comparison API ───
+// ─── Three-Year Comparison API ───
 app.get('/api/compare', auth, async (req, res) => {
   try {
-    const { startMonth, startDay, endMonth, endDay, year1, year2, campus, course } = req.query;
-    if (!startMonth || !startDay || !endMonth || !endDay || !year1 || !year2) {
-      return res.status(400).json({ error: 'startMonth, startDay, endMonth, endDay, year1, year2 required' });
+    const { startMonth, startDay, endMonth, endDay, year1, year2, year3, campus, course } = req.query;
+    if (!startMonth || !startDay || !endMonth || !endDay || !year1 || !year2 || !year3) {
+      return res.status(400).json({ error: 'startMonth, startDay, endMonth, endDay, year1, year2, year3 required' });
     }
 
-    const y1 = parseInt(year1), y2 = parseInt(year2);
+    const y1 = parseInt(year1), y2 = parseInt(year2), y3 = parseInt(year3);
     const sm = parseInt(startMonth) - 1, sd = parseInt(startDay);
     const em = parseInt(endMonth) - 1, ed = parseInt(endDay);
 
@@ -744,21 +744,27 @@ app.get('/api/compare', auth, async (req, res) => {
     const end1 = new Date(Date.UTC(y1, em, ed, 23, 59, 59, 999));
     const start2 = new Date(Date.UTC(y2, sm, sd));
     const end2 = new Date(Date.UTC(y2, em, ed, 23, 59, 59, 999));
+    const start3 = new Date(Date.UTC(y3, sm, sd));
+    const end3 = new Date(Date.UTC(y3, em, ed, 23, 59, 59, 999));
 
     const extra = { campus: campus || '', course: course || '' };
 
-    const [enq1, reg1, adm1, enq2, reg2, adm2] = await Promise.all([
+    const [enq1, reg1, adm1, enq2, reg2, adm2, enq3, reg3, adm3] = await Promise.all([
       Student.countDocuments(buildDateFilter('enquiryDateParsed', start1, end1, extra)),
       Student.countDocuments(buildDateFilter('registrationDateParsed', start1, end1, extra)),
       Student.countDocuments(buildDateFilter('admissionDateParsed', start1, end1, extra)),
       Student.countDocuments(buildDateFilter('enquiryDateParsed', start2, end2, extra)),
       Student.countDocuments(buildDateFilter('registrationDateParsed', start2, end2, extra)),
-      Student.countDocuments(buildDateFilter('admissionDateParsed', start2, end2, extra))
+      Student.countDocuments(buildDateFilter('admissionDateParsed', start2, end2, extra)),
+      Student.countDocuments(buildDateFilter('enquiryDateParsed', start3, end3, extra)),
+      Student.countDocuments(buildDateFilter('registrationDateParsed', start3, end3, extra)),
+      Student.countDocuments(buildDateFilter('admissionDateParsed', start3, end3, extra))
     ]);
 
     res.json({
       year1: { year: y1, enquiry: enq1, registration: reg1, admission: adm1, total: enq1 + reg1 + adm1 },
-      year2: { year: y2, enquiry: enq2, registration: reg2, admission: adm2, total: enq2 + reg2 + adm2 }
+      year2: { year: y2, enquiry: enq2, registration: reg2, admission: adm2, total: enq2 + reg2 + adm2 },
+      year3: { year: y3, enquiry: enq3, registration: reg3, admission: adm3, total: enq3 + reg3 + adm3 }
     });
   } catch (err) {
     console.error('Compare error:', err);
@@ -766,15 +772,15 @@ app.get('/api/compare', auth, async (req, res) => {
   }
 });
 
-// ─── Comparison Export (detailed student lists for both years) ───
+// ─── Three-Year Comparison Export (detailed student lists for all three years) ───
 app.get('/api/compare/export', auth, async (req, res) => {
   try {
-    const { startMonth, startDay, endMonth, endDay, year1, year2, campus, course } = req.query;
-    if (!startMonth || !startDay || !endMonth || !endDay || !year1 || !year2) {
+    const { startMonth, startDay, endMonth, endDay, year1, year2, year3, campus, course } = req.query;
+    if (!startMonth || !startDay || !endMonth || !endDay || !year1 || !year2 || !year3) {
       return res.status(400).json({ error: 'All params required' });
     }
 
-    const y1 = parseInt(year1), y2 = parseInt(year2);
+    const y1 = parseInt(year1), y2 = parseInt(year2), y3 = parseInt(year3);
     const sm = parseInt(startMonth) - 1, sd = parseInt(startDay);
     const em = parseInt(endMonth) - 1, ed = parseInt(endDay);
 
@@ -782,16 +788,21 @@ app.get('/api/compare/export', auth, async (req, res) => {
     const end1 = new Date(Date.UTC(y1, em, ed, 23, 59, 59, 999));
     const start2 = new Date(Date.UTC(y2, sm, sd));
     const end2 = new Date(Date.UTC(y2, em, ed, 23, 59, 59, 999));
+    const start3 = new Date(Date.UTC(y3, sm, sd));
+    const end3 = new Date(Date.UTC(y3, em, ed, 23, 59, 59, 999));
 
     const extra = { campus: campus || '', course: course || '' };
 
-    const [enq1, reg1, adm1, enq2, reg2, adm2] = await Promise.all([
+    const [enq1, reg1, adm1, enq2, reg2, adm2, enq3, reg3, adm3] = await Promise.all([
       Student.find(buildDateFilter('enquiryDateParsed', start1, end1, extra), listProjection).lean(),
       Student.find(buildDateFilter('registrationDateParsed', start1, end1, extra), listProjection).lean(),
       Student.find(buildDateFilter('admissionDateParsed', start1, end1, extra), listProjection).lean(),
       Student.find(buildDateFilter('enquiryDateParsed', start2, end2, extra), listProjection).lean(),
       Student.find(buildDateFilter('registrationDateParsed', start2, end2, extra), listProjection).lean(),
-      Student.find(buildDateFilter('admissionDateParsed', start2, end2, extra), listProjection).lean()
+      Student.find(buildDateFilter('admissionDateParsed', start2, end2, extra), listProjection).lean(),
+      Student.find(buildDateFilter('enquiryDateParsed', start3, end3, extra), listProjection).lean(),
+      Student.find(buildDateFilter('registrationDateParsed', start3, end3, extra), listProjection).lean(),
+      Student.find(buildDateFilter('admissionDateParsed', start3, end3, extra), listProjection).lean()
     ]);
 
     res.json({
@@ -806,6 +817,12 @@ app.get('/api/compare/export', auth, async (req, res) => {
         enquiries: enq2.map(s => mapDoc(s, 'enquiredCenter', 'dateOfEnquiry')),
         registrations: reg2.map(s => mapDoc(s, 'registeredCenter', 'dateOfRegistration')),
         admissions: adm2.map(s => mapDoc(s, 'admittedCenter', 'dateOfAdmission'))
+      },
+      year3: {
+        year: y3,
+        enquiries: enq3.map(s => mapDoc(s, 'enquiredCenter', 'dateOfEnquiry')),
+        registrations: reg3.map(s => mapDoc(s, 'registeredCenter', 'dateOfRegistration')),
+        admissions: adm3.map(s => mapDoc(s, 'admittedCenter', 'dateOfAdmission'))
       }
     });
   } catch (err) {

@@ -8,6 +8,7 @@ node_modules/
 
 # OS files
 .DS_Store
+._*
 Thumbs.db
 *.swp
 *.swo

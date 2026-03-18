@@ -246,11 +246,12 @@ tbody tr{transition:background .1s;}
 .cmp-year-pill{padding:16px 48px;border-radius:var(--radius-xl);font-size:26px;font-weight:800;color:white;letter-spacing:-0.5px;box-shadow:0 4px 14px rgba(0,0,0,0.15);min-width:160px;text-align:center;}
 .cmp-year-pill.y1{background:linear-gradient(135deg,#3b82f6,#1d4ed8);}
 .cmp-year-pill.y2{background:linear-gradient(135deg,#8b5cf6,#6d28d9);}
+.cmp-year-pill.y3{background:linear-gradient(135deg,#10b981,#047857);}
 .cmp-vs-badge{font-size:15px;font-weight:800;color:var(--text-muted);letter-spacing:3px;text-transform:uppercase;}
 
 /* Metric rows */
 .cmp-metrics{display:flex;flex-direction:column;gap:16px;margin-bottom:28px;}
-.cmp-row{display:grid;grid-template-columns:1fr 200px 1fr;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-xl);padding:28px 36px;transition:all 0.25s ease;}
+.cmp-row{display:grid;grid-template-columns:1fr 1fr 1fr;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-xl);padding:28px 36px;transition:all 0.25s ease;}
 .cmp-row:hover{box-shadow:0 8px 24px rgba(0,0,0,0.06);border-color:#cbd5e1;transform:translateY(-1px);}
 .cmp-row.total-row{background:linear-gradient(135deg,#f0f9ff 0%,#eff6ff 100%);border-color:#93c5fd;}
 .cmp-row.total-row:hover{border-color:#60a5fa;}
@@ -633,7 +634,7 @@ tbody tr{transition:background .1s;}
     <div class="section-header">
       <div class="section-title">
         <span class="icon" style="background:var(--accent-light);color:var(--accent);">📊</span>
-        Year-over-Year Comparison
+        Three-Year Comparison Analysis
       </div>
     </div>
     <div class="section-body">
@@ -664,6 +665,16 @@ tbody tr{transition:background .1s;}
           </select>
         </div>
         <div class="ctrl-group">
+          <label>Year 3</label>
+          <select id="cmpYear3">
+            <option value="2022">2022</option>
+            <option value="2023" selected>2023</option>
+            <option value="2024">2024</option>
+            <option value="2025">2025</option>
+            <option value="2026">2026</option>
+          </select>
+        </div>
+        <div class="ctrl-group">
           <label>Campus</label>
           <select id="cmpCampus">
             <option value="">All Campuses</option>
@@ -688,6 +699,8 @@ tbody tr{transition:background .1s;}
       <div class="cmp-year-pill y1" id="cmpPill1"></div>
       <div class="cmp-vs-badge">VS</div>
       <div class="cmp-year-pill y2" id="cmpPill2"></div>
+      <div class="cmp-vs-badge">VS</div>
+      <div class="cmp-year-pill y3" id="cmpPill3"></div>
     </div>
 
     <!-- Metric Rows (balanced both sides) -->
@@ -1757,6 +1770,7 @@ function getCmpParams(){
     endMonth:e[1], endDay:e[2],
     year1:document.getElementById('cmpYear1').value,
     year2:document.getElementById('cmpYear2').value,
+    year3:document.getElementById('cmpYear3').value,
     campus:document.getElementById('cmpCampus').value,
     course:document.getElementById('cmpCourse').value
   };
@@ -1778,9 +1792,9 @@ function pctChange(v1,v2){
 async function runComparison(){
   const p=getCmpParams();
   if(!p){alert('Please select both From and To dates.');return;}
-  if(p.year1===p.year2){alert('Please select different years to compare.');return;}
+  if(p.year1===p.year2||p.year1===p.year3||p.year2===p.year3){alert('Please select different years to compare.');return;}
 
-  showLoading('Comparing '+p.year1+' vs '+p.year2+'...');
+  showLoading('Comparing '+p.year1+' vs '+p.year2+' vs '+p.year3+'...');
 
   try{
     const params=new URLSearchParams(p).toString();
@@ -1788,13 +1802,14 @@ async function runComparison(){
     const d=await r.json();
     compareData=d;
 
-    const y1=d.year1, y2=d.year2;
+    const y1=d.year1, y2=d.year2, y3=d.year3;
 
     // Render year header pills
     document.getElementById('cmpPill1').textContent=y1.year;
     document.getElementById('cmpPill2').textContent=y2.year;
+    document.getElementById('cmpPill3').textContent=y3.year;
 
-    // Render metric rows (balanced — both sides equal)
+    // Render metric rows (three columns for three years)
     const metrics=[
       {key:'enquiry',  label:'Enquiries',     cls:'enq'},
       {key:'registration', label:'Registrations', cls:'reg'},
@@ -1804,43 +1819,55 @@ async function runComparison(){
 
     let rowsHTML='';
     metrics.forEach(m=>{
-      const v1=y1[m.key], v2=y2[m.key];
+      const v1=y1[m.key], v2=y2[m.key], v3=y3[m.key];
       const isTotal=m.key==='total';
       rowsHTML+=
         '<div class="cmp-row'+(isTotal?' total-row':'')+'">'+
           '<div class="cmp-cell y1">'+
             '<div class="cmp-tag">'+y1.year+'</div>'+
             '<div class="cmp-num '+m.cls+'">'+v1.toLocaleString()+'</div>'+
-          '</div>'+
-          '<div class="cmp-middle">'+
             '<div class="cmp-metric-label">'+m.label+'</div>'+
-            diffBadge(v1,v2)+
-            '<div class="cmp-pct">'+pctChange(v1,v2)+'</div>'+
           '</div>'+
           '<div class="cmp-cell y2">'+
             '<div class="cmp-tag">'+y2.year+'</div>'+
             '<div class="cmp-num '+m.cls+'">'+v2.toLocaleString()+'</div>'+
+          '</div>'+
+          '<div class="cmp-cell y3">'+
+            '<div class="cmp-tag">'+y3.year+'</div>'+
+            '<div class="cmp-num '+m.cls+'">'+v3.toLocaleString()+'</div>'+
           '</div>'+
         '</div>';
     });
     document.getElementById('cmpMetrics').innerHTML=rowsHTML;
 
     // Render Summary Table
-    let html='<thead><tr><th style="text-align:left;">Metric</th><th>'+y1.year+'</th><th>'+y2.year+'</th><th>Difference</th><th>% Change</th></tr></thead><tbody>';
+    let html='<thead><tr><th style="text-align:left;">Metric</th><th>'+y1.year+'</th><th>'+y2.year+'</th><th>'+y3.year+'</th><th>Y1 vs Y2</th><th>Y1 vs Y3</th><th>Y2 vs Y3</th></tr></thead><tbody>';
     const rows=[
-      ['Enquiries',y1.enquiry,y2.enquiry],
-      ['Registrations',y1.registration,y2.registration],
-      ['Admissions',y1.admission,y2.admission],
-      ['Total',y1.total,y2.total]
+      ['Enquiries',y1.enquiry,y2.enquiry,y3.enquiry],
+      ['Registrations',y1.registration,y2.registration,y3.registration],
+      ['Admissions',y1.admission,y2.admission,y3.admission],
+      ['Total',y1.total,y2.total,y3.total]
     ];
-    rows.forEach(([label,v1,v2],idx)=>{
-      const diff=v1-v2;
-      const diffClass=diff>0?'color:#15803d':diff<0?'color:#b91c1c':'color:var(--text-muted)';
-      const sign=diff>0?'+':'';
+    rows.forEach(([label,v1,v2,v3],idx)=>{
+      const diff12=v1-v2;
+      const diff13=v1-v3;
+      const diff23=v2-v3;
+      const diffClass12=diff12>0?'color:#15803d':diff12<0?'color:#b91c1c':'color:var(--text-muted)';
+      const diffClass13=diff13>0?'color:#15803d':diff13<0?'color:#b91c1c':'color:var(--text-muted)';
+      const diffClass23=diff23>0?'color:#15803d':diff23<0?'color:#b91c1c':'color:var(--text-muted)';
+      const sign12=diff12>0?'+':'';
+      const sign13=diff13>0?'+':'';
+      const sign23=diff23>0?'+':'';
       const isTotal=idx===rows.length-1;
-      html+='<tr'+(isTotal?' class="total-summary-row"':'')+'><td class="metric-col">'+label+'</td><td style="font-weight:700;">'+v1.toLocaleString()+'</td><td style="font-weight:700;">'+v2.toLocaleString()+'</td>';
-      html+='<td style="'+diffClass+';font-weight:700;">'+sign+diff+'</td>';
-      html+='<td style="'+diffClass+';font-weight:700;">'+pctChange(v1,v2)+'</td></tr>';
+      html+='<tr'+(isTotal?' class="total-summary-row"':'')+'>';
+      html+='<td class="metric-col">'+label+'</td>';
+      html+='<td style="font-weight:700;">'+v1.toLocaleString()+'</td>';
+      html+='<td style="font-weight:700;">'+v2.toLocaleString()+'</td>';
+      html+='<td style="font-weight:700;">'+v3.toLocaleString()+'</td>';
+      html+='<td style="'+diffClass12+';font-weight:700;">'+sign12+diff12+' ('+pctChange(v1,v2)+')</td>';
+      html+='<td style="'+diffClass13+';font-weight:700;">'+sign13+diff13+' ('+pctChange(v1,v3)+')</td>';
+      html+='<td style="'+diffClass23+';font-weight:700;">'+sign23+diff23+' ('+pctChange(v2,v3)+')</td>';
+      html+='</tr>';
     });
     html+='</tbody>';
     document.getElementById('cmpTable').innerHTML=html;
@@ -1866,16 +1893,17 @@ async function downloadComparisonExcel(){
 
     // Summary sheet
     const summaryRows=[
-      ['Metric',String(d.year1.year),String(d.year2.year),'Difference','% Change'],
-      ['Enquiries',d.year1.enquiries.length,d.year2.enquiries.length,d.year1.enquiries.length-d.year2.enquiries.length,pctChange(d.year1.enquiries.length,d.year2.enquiries.length)],
-      ['Registrations',d.year1.registrations.length,d.year2.registrations.length,d.year1.registrations.length-d.year2.registrations.length,pctChange(d.year1.registrations.length,d.year2.registrations.length)],
-      ['Admissions',d.year1.admissions.length,d.year2.admissions.length,d.year1.admissions.length-d.year2.admissions.length,pctChange(d.year1.admissions.length,d.year2.admissions.length)],
-      ['Total',d.year1.enquiries.length+d.year1.registrations.length+d.year1.admissions.length,d.year2.enquiries.length+d.year2.registrations.length+d.year2.admissions.length]
+      ['Metric',String(d.year1.year),String(d.year2.year),String(d.year3.year),'Y1 vs Y2','Y1 vs Y3','Y2 vs Y3'],
+      ['Enquiries',d.year1.enquiries.length,d.year2.enquiries.length,d.year3.enquiries.length,d.year1.enquiries.length-d.year2.enquiries.length,d.year1.enquiries.length-d.year3.enquiries.length,d.year2.enquiries.length-d.year3.enquiries.length],
+      ['Registrations',d.year1.registrations.length,d.year2.registrations.length,d.year3.registrations.length,d.year1.registrations.length-d.year2.registrations.length,d.year1.registrations.length-d.year3.registrations.length,d.year2.registrations.length-d.year3.registrations.length],
+      ['Admissions',d.year1.admissions.length,d.year2.admissions.length,d.year3.admissions.length,d.year1.admissions.length-d.year2.admissions.length,d.year1.admissions.length-d.year3.admissions.length,d.year2.admissions.length-d.year3.admissions.length],
+      ['Total',d.year1.enquiries.length+d.year1.registrations.length+d.year1.admissions.length,d.year2.enquiries.length+d.year2.registrations.length+d.year2.admissions.length,d.year3.enquiries.length+d.year3.registrations.length+d.year3.admissions.length]
     ];
-    summaryRows[4].push(summaryRows[4][1]-summaryRows[4][2]);
-    summaryRows[4].push(pctChange(summaryRows[4][1],summaryRows[4][2]));
+    summaryRows[4].push(summaryRows[4][1]-summaryRows[4][2]); // Total Y1 vs Y2
+    summaryRows[4].push(summaryRows[4][1]-summaryRows[4][3]); // Total Y1 vs Y3
+    summaryRows[4].push(summaryRows[4][2]-summaryRows[4][3]); // Total Y2 vs Y3
     const sws=XLSX.utils.aoa_to_sheet(summaryRows);
-    sws['!cols']=[{wch:16},{wch:10},{wch:10},{wch:12},{wch:12}];
+    sws['!cols']=[{wch:16},{wch:10},{wch:10},{wch:10},{wch:12},{wch:12},{wch:12}];
     XLSX.utils.book_append_sheet(wb,sws,'Summary');
 
     // Detail sheets for each year
@@ -1893,8 +1921,9 @@ async function downloadComparisonExcel(){
     }
     addDetailSheets(d.year1,String(d.year1.year));
     addDetailSheets(d.year2,String(d.year2.year));
+    addDetailSheets(d.year3,String(d.year3.year));
 
-    XLSX.writeFile(wb,'GEU_Comparison_'+d.year1.year+'_vs_'+d.year2.year+'.xlsx');
+    XLSX.writeFile(wb,'GEU_Comparison_'+d.year1.year+'_'+d.year2.year+'_'+d.year3.year+'.xlsx');
   }catch(e){
     alert('Export failed: '+e.message);
   }finally{hideLoading();}
