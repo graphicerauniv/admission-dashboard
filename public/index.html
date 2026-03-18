@@ -602,7 +602,7 @@ tbody tr{transition:background .1s;}
     <div class="section-body">
       <p style="color:var(--text-muted);font-size:12px;margin-bottom:16px;">
         Upload one or two Razorpay Excel / CSV reports. The system will auto-detect columns and extract:
-        <strong>Payment Page Title, Payment Date, Order ID, Payment ID, Name, Email, Phone</strong>.
+        <strong>Payment Page Title, Payment Date, Order ID, Payment ID, Name, Email, Phone, Total Payment Amount, Item Amount</strong>.
       </p>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px;">
         <div>
@@ -810,29 +810,25 @@ function showDashboard(role, name){
   document.getElementById('loginPage').style.display='none';
   document.getElementById('dashboardPage').style.display='block';
 
-  // Navbar user info
   document.getElementById('userName').textContent=name;
   const roleEl=document.getElementById('userRole');
   roleEl.textContent=role.toUpperCase();
   roleEl.className='nav-role '+(role==='admin'?'role-admin':'role-user');
 
-  // Avatar initials
   const initials=name.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
   document.getElementById('navAvatar').textContent=initials||'U';
 
-  // Show/hide admin sections
   document.querySelectorAll('.admin-only').forEach(el=>{
     el.style.display=role==='admin'?'':'none';
   });
 
-  // Always start on dashboard view
   switchView('dashboard');
 
   loadDBCount();
   if(role==='admin'){ loadUserList(); loadMerittoInfo(); }
 }
 
-// ─── View Switching (Dashboard vs Compare vs Admin Panel) ───
+// ─── View Switching ───
 function switchView(view){
   const dash=document.getElementById('viewDashboard');
   const admin=document.getElementById('viewAdmin');
@@ -886,7 +882,6 @@ function hideLoading(){
   document.getElementById('loadingOverlay').classList.remove('show');
 }
 
-// ─── Load DB count on page load ───
 async function loadDBCount(){
   try{
     const r=await authFetch('/api/count');
@@ -895,7 +890,6 @@ async function loadDBCount(){
   }catch(e){document.getElementById('dbCount').textContent='Error';}
 }
 
-// ─── Upload CSV to MongoDB ───
 async function uploadCSV(){
   const file=document.getElementById('csvUpload').files[0];
   if(!file){alert('Select a CSV file first.');return;}
@@ -925,7 +919,6 @@ async function uploadCSV(){
   }finally{hideLoading();}
 }
 
-// ─── Migrate old records ───
 async function migrateDates(){
   showLoading('Migrating old records...');
   const status=document.getElementById('uploadStatus');
@@ -940,7 +933,6 @@ async function migrateDates(){
   }finally{hideLoading();}
 }
 
-// ─── Get common query params ───
 function getQueryParams(tab, page){
   const sv=document.getElementById('startDate').value;
   const ev=document.getElementById('endDate').value;
@@ -956,7 +948,6 @@ function getQueryParams(tab, page){
   return params;
 }
 
-// ─── Load summary counts + dropdowns only ───
 async function loadFromDB(){
   const sv=document.getElementById('startDate').value;
   const ev=document.getElementById('endDate').value;
@@ -967,15 +958,12 @@ async function loadFromDB(){
     const r=await authFetch('/api/students?startDate='+sv+'&endDate='+ev);
     const d=await r.json();
 
-    // Update counts
     document.getElementById('enquiryCount').innerText=d.enquiryCount||0;
     document.getElementById('registrationCount').innerText=d.registrationCount||0;
     document.getElementById('admissionCount').innerText=d.admissionCount||0;
 
-    // Populate dropdowns
     let campusSel=document.getElementById('campusFilter');
     campusSel.innerHTML='<option value="">All Campuses</option>';
-    // Add GEHU grouped option if any GEHU campus exists
     const gehuCampuses=(d.campuses||[]).filter(c=>c.toLowerCase().includes('gehu'));
     if(gehuCampuses.length>1){
       campusSel.innerHTML+='<option value="GEHU" style="font-weight:700;">⭐ GEHU (All Campuses)</option>';
@@ -995,7 +983,6 @@ async function loadFromDB(){
     currentTab='enquiry';
     currentPage=1;
 
-    // Load first page inline (no second loading cycle)
     try{
       const pr=await authFetch('/api/students/page?'+getQueryParams('enquiry',1));
       const pd=await pr.json();
@@ -1014,7 +1001,6 @@ async function loadFromDB(){
   }finally{hideLoading();}
 }
 
-// ─── Load paginated table data ───
 async function loadPage(page){
   const sv=document.getElementById('startDate').value;
   const ev=document.getElementById('endDate').value;
@@ -1036,7 +1022,6 @@ async function loadPage(page){
   }finally{hideLoading();}
 }
 
-// ─── Update filtered counts (re-count with current filters) ───
 async function updateFilteredCounts(){
   const sv=document.getElementById('startDate').value;
   const ev=document.getElementById('endDate').value;
@@ -1047,7 +1032,6 @@ async function updateFilteredCounts(){
   const year=document.getElementById('yearFilter').value;
   const search=document.getElementById('searchInput').value.trim();
 
-  // If no filters are active, just use summary API
   if(!campus&&!course&&!year&&!search) {
     const r=await authFetch('/api/students?startDate='+sv+'&endDate='+ev);
     const d=await r.json();
@@ -1057,7 +1041,6 @@ async function updateFilteredCounts(){
     return;
   }
 
-  // With filters, get counts via the paginate endpoint (page=1, limit=1)
   try{
     const [enqR, regR, admR] = await Promise.all([
       authFetch('/api/students/page?'+getQueryParams('enquiry',1)+'&limit=1').then(r=>r.json()),
@@ -1070,7 +1053,6 @@ async function updateFilteredCounts(){
   }catch(e){}
 }
 
-// ─── Pagination controls ───
 function updatePagination(){
   const bar=document.getElementById('paginationBar');
   if(totalPages<=1 && totalRecords<=30){bar.style.display='none';return;}
@@ -1088,7 +1070,6 @@ function changePage(delta){
   loadPage(newPage);
 }
 
-// ─── Show student popup ───
 async function showStudentDetail(id){
   document.getElementById('modalOverlay').classList.add('show');
   document.getElementById('modalBody').innerHTML='<div style="text-align:center;padding:30px;color:#999;">Loading student details...</div>';
@@ -1099,14 +1080,12 @@ async function showStudentDetail(id){
 
     let html='';
 
-    // Date Cards
     html+='<div class="date-cards">';
     html+='<div class="date-card enq"><div class="dt-label">📩 Date of Enquiry</div><div class="dt-val '+(s.dateOfEnquiry?'':'empty')+'">'+(s.dateOfEnquiry||'N/A')+'</div></div>';
     html+='<div class="date-card reg"><div class="dt-label">📝 Date of Registration</div><div class="dt-val '+(s.dateOfRegistration?'':'empty')+'">'+(s.dateOfRegistration||'N/A')+'</div></div>';
     html+='<div class="date-card adm"><div class="dt-label">🎓 Date of Admission</div><div class="dt-val '+(s.dateOfAdmission?'':'empty')+'">'+(s.dateOfAdmission||'N/A')+'</div></div>';
     html+='</div>';
 
-    // Personal Info
     html+='<div class="modal-section"><h4>👤 Personal Information</h4><div class="modal-grid">';
     html+=item('Student ID',s.studentId);
     html+=item('Name',s.name);
@@ -1123,7 +1102,6 @@ async function showStudentDetail(id){
     html+=item('Aadhar No',s.aadhar);
     html+='</div></div>';
 
-    // Course Info
     html+='<div class="modal-section"><h4>📚 Course Information</h4><div class="modal-grid">';
     html+=item('Course Type',s.courseType);
     html+=item('Course Name',s.courseName);
@@ -1135,7 +1113,6 @@ async function showStudentDetail(id){
     html+=item('Admitted Center',s.admittedCenter);
     html+='</div></div>';
 
-    // Address
     html+='<div class="modal-section"><h4>🏠 Address</h4><div class="modal-grid">';
     html+=item('Address',s.address);
     html+=item('District',s.district);
@@ -1144,7 +1121,6 @@ async function showStudentDetail(id){
     html+=item('Pincode',s.pincode);
     html+='</div></div>';
 
-    // Academic
     html+='<div class="modal-section"><h4>📖 Academic Details</h4><div class="modal-grid">';
     html+=item('10th Board',s.tenthBoard);
     html+=item('10th School',s.tenthSchool);
@@ -1179,7 +1155,6 @@ function closeModal(e){
     document.getElementById('modalOverlay').classList.remove('show');
 }
 
-// ─── Tab / Filter / Render logic ───
 function statusBadge(s){
   let cls='badge-enquired';
   if(s==='Admitted') cls='badge-admitted';
@@ -1237,11 +1212,10 @@ function filterTable(){
   clearTimeout(searchTimer);
   searchTimer=setTimeout(()=>{
     loadPage(1);
-    updateFilteredCounts(); // background, non-blocking
+    updateFilteredCounts();
   },300);
 }
 
-// ─── Excel Export (fetches all from server) ───
 function listToSheetData(list,showType){
   let h=['#','Student ID','Name','Course Type','Course Name','Status','Campus/Center','Gender','Category','State','Mobile','Email'];
   if(showType) h.push('Date Type');
@@ -1386,20 +1360,14 @@ async function deleteUser(id,email){
 
 let rzpAllRows = [];
 
-/**
- * Flexible column finder — tries exact normalized match first,
- * then "contains" match. Handles spaces, underscores, case, etc.
- */
 function findRzpCol(headers, ...candidates) {
   const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
   const hNorm = headers.map(h => ({ orig: h, n: norm(h) }));
-  // Pass 1 — exact normalized match
   for (const c of candidates) {
     const cn = norm(c);
     const found = hNorm.find(h => h.n === cn);
     if (found) return found.orig;
   }
-  // Pass 2 — header contains candidate token (or vice-versa)
   for (const c of candidates) {
     const cn = norm(c);
     const found = hNorm.find(h => h.n.includes(cn) || cn.includes(h.n));
@@ -1408,21 +1376,14 @@ function findRzpCol(headers, ...candidates) {
   return null;
 }
 
-/**
- * Parse a single Razorpay workbook — auto-detects relevant columns.
- * Returns { rows, colMap } where colMap shows what was detected.
- */
 function parseRzpWorkbook(workbook) {
-  // Use the first sheet
   const sheetName = workbook.SheetNames[0];
   const ws = workbook.Sheets[sheetName];
-  // cellDates already applied at read time; use raw to format later
   const data = XLSX.utils.sheet_to_json(ws, { defval: '' });
   if (!data.length) return { rows: [], colMap: {} };
 
   const headers = Object.keys(data[0]);
 
-  // Column candidates (ordered by Razorpay's standard naming)
   const colTitle  = findRzpCol(headers,
     'payment page title','payment link title','page title','payment link description','description','title','payment link name','remarks');
   const colDate   = findRzpCol(headers,
@@ -1435,37 +1396,45 @@ function parseRzpWorkbook(workbook) {
     'customer name','payer name','name','contact name','buyer name','full name');
   const colEmail  = findRzpCol(headers,
     'customer email','email id','email','payer email','buyer email');
-  const colPhone      = findRzpCol(headers,
+  const colPhone  = findRzpCol(headers,
     'customer contact','contact','phone','mobile','phone number','mobile number','customer phone','payer phone');
-  // Settlement columns (typically in the settlements / reconciliation export)
-  const colEntityId    = findRzpCol(headers,
+  const colEntityId  = findRzpCol(headers,
     'entity_id','entity id','payment entity id');
-  const colSettleUTR   = findRzpCol(headers,
+  const colSettleUTR = findRzpCol(headers,
     'settlement_utr','settlement utr','utr','utr number','utr no');
-  const colSettleId    = findRzpCol(headers,
+  const colSettleId  = findRzpCol(headers,
     'settlement_id','settlement id','settled by','settlement batch id','batch id');
-  const colSettledAt   = findRzpCol(headers,
+  const colSettledAt = findRzpCol(headers,
     'settled_at','settled at','settlement date','settlement time');
-  const colAddlUTR     = findRzpCol(headers,
+  const colAddlUTR   = findRzpCol(headers,
     'additional_utr','additional utr','additional utr number');
 
+  // ── Amount columns ──
+  const colTotalAmt = findRzpCol(headers,
+    'total payment amount','total amount','payment amount','amount','total','net amount','gross amount','transaction amount');
+  // ── Item Amount: covers common misspellings (iteam, item, itan) ──
+  const colItemAmt  = findRzpCol(headers,
+    'item amount','iteam amount','itan amount','item fee','iten amount','item charges','item payment',
+    'item amt','iteam amt','itan amt');
+
   const colMap = {
-    'Payment Page Title': colTitle     || '—not found—',
-    'Payment Date':       colDate      || '—not found—',
-    'Order ID':           colOrder     || '—not found—',
-    'Payment ID':         colPayId     || '—not found—',
-    'Name':               colName      || '—not found—',
-    'Email':              colEmail     || '—not found—',
-    'Phone':              colPhone     || '—not found—',
-    'Entity ID (join)':   colEntityId  || '—not found—',
-    'Settlement UTR':     colSettleUTR || '—not found—',
-    'Settlement ID':      colSettleId  || '—not found—',
-    'Settled At':         colSettledAt || '—not found—',
-    'Additional UTR':     colAddlUTR   || '—not found—',
+    'Payment Page Title':   colTitle      || '—not found—',
+    'Payment Date':         colDate       || '—not found—',
+    'Order ID':             colOrder      || '—not found—',
+    'Payment ID':           colPayId      || '—not found—',
+    'Name':                 colName       || '—not found—',
+    'Email':                colEmail      || '—not found—',
+    'Phone':                colPhone      || '—not found—',
+    'Total Payment Amount': colTotalAmt   || '—not found—',
+    'Item Amount':          colItemAmt    || '—not found—',
+    'Entity ID (join)':     colEntityId   || '—not found—',
+    'Settlement UTR':       colSettleUTR  || '—not found—',
+    'Settlement ID':        colSettleId   || '—not found—',
+    'Settled At':           colSettledAt  || '—not found—',
+    'Additional UTR':       colAddlUTR    || '—not found—',
   };
 
   const rows = data.map(row => {
-    // Format dates that XLSX parsed as Date objects
     const rawDate = colDate ? row[colDate] : '';
     let payDate = '';
     if (rawDate instanceof Date) {
@@ -1475,26 +1444,32 @@ function parseRzpWorkbook(workbook) {
     }
 
     return {
-      'Payment Page Title': colTitle     ? String(row[colTitle]     || '').trim() : '',
-      'Payment Date':       payDate,
-      'Order ID':           colOrder     ? String(row[colOrder]     || '').trim() : '',
-      'Payment ID':         colPayId     ? String(row[colPayId]     || '').trim() : '',
-      'Name':               colName      ? String(row[colName]      || '').trim() : '',
-      'Email':              colEmail     ? String(row[colEmail]     || '').trim() : '',
-      'Phone':              colPhone     ? String(row[colPhone]     || '').trim() : '',
-      // Settlement fields
-      '_entityId':          colEntityId  ? String(row[colEntityId]  || '').trim() : '',
-      'Settlement UTR':     colSettleUTR ? String(row[colSettleUTR] || '').trim() : '',
-      'Settlement ID':      colSettleId  ? String(row[colSettleId]  || '').trim() : '',
-      'Settled At':         colSettledAt ? (() => { const v = row[colSettledAt]; return v instanceof Date ? v.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) : String(v||'').trim(); })() : '',
-      'Additional UTR':     colAddlUTR   ? String(row[colAddlUTR]   || '').trim() : '',
+      'Payment Page Title':   colTitle     ? String(row[colTitle]     || '').trim() : '',
+      'Payment Date':         payDate,
+      'Order ID':             colOrder     ? String(row[colOrder]     || '').trim() : '',
+      'Payment ID':           colPayId     ? String(row[colPayId]     || '').trim() : '',
+      'Name':                 colName      ? String(row[colName]      || '').trim() : '',
+      'Email':                colEmail     ? String(row[colEmail]     || '').trim() : '',
+      'Phone':                colPhone     ? String(row[colPhone]     || '').trim() : '',
+      'Total Payment Amount': colTotalAmt  ? String(row[colTotalAmt]  || '').trim() : '',
+      'Item Amount':          colItemAmt   ? String(row[colItemAmt]   || '').trim() : '',
+      // Settlement fields (internal join key prefixed with _)
+      '_entityId':            colEntityId  ? String(row[colEntityId]  || '').trim() : '',
+      'Settlement UTR':       colSettleUTR ? String(row[colSettleUTR] || '').trim() : '',
+      'Settlement ID':        colSettleId  ? String(row[colSettleId]  || '').trim() : '',
+      'Settled At':           colSettledAt ? (() => {
+                                const v = row[colSettledAt];
+                                return v instanceof Date
+                                  ? v.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})
+                                  : String(v||'').trim();
+                              })() : '',
+      'Additional UTR':       colAddlUTR   ? String(row[colAddlUTR]   || '').trim() : '',
     };
   });
 
   return { rows, colMap };
 }
 
-/** Read a File → XLSX workbook (Promise) */
 function readAsWorkbook(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -1531,7 +1506,6 @@ async function processRazorpayReports() {
     let allRows = [];
     const colMaps = [];
     const counts  = [];
-
     let rows1 = [], rows2 = [];
 
     if (file1) {
@@ -1547,12 +1521,10 @@ async function processRazorpayReports() {
       colMaps.push({ file: file2.name, map: colMap });
     }
 
-    // ── Settlement join ──────────────────────────────────────────
-    // Build a lookup map: entity_id → { Settlement UTR, Settlement ID, Settled At, Additional UTR }
-    // Scans BOTH files so it doesn't matter which file is payments vs settlements.
+    // ── Settlement join ──
     const settlementMap = {};
     [...rows1, ...rows2].forEach(r => {
-      const key = r['_entityId'] || r['Payment ID']; // entity_id takes priority
+      const key = r['_entityId'] || r['Payment ID'];
       if (key && (r['Settlement UTR'] || r['Settlement ID'] || r['Settled At'] || r['Additional UTR'])) {
         settlementMap[key] = {
           'Settlement UTR': r['Settlement UTR'],
@@ -1563,8 +1535,6 @@ async function processRazorpayReports() {
       }
     });
 
-    // Keep only rows that are proper payment rows (have Payment ID or Name).
-    // Then enrich with settlement data from the lookup map.
     const enrichRow = r => {
       const settle = settlementMap[r['Payment ID']] || {};
       return {
@@ -1592,12 +1562,14 @@ async function processRazorpayReports() {
 
     rzpAllRows = allRows;
 
-    // Build column detection info box
+    // Column detection info box
     let infoHtml = '<strong>🔍 Column Mapping Detected:</strong><br>';
     colMaps.forEach(cm => {
       infoHtml += '<span style="color:var(--accent);font-weight:700;">'+cm.file+'</span> → ';
       const parts = Object.entries(cm.map).map(([k,v]) =>
-        '<span title="'+k+'">'+(v==='—not found—'?'<span style="color:var(--danger);">'+k+': N/A</span>':'<span style="color:var(--success-dark);">'+k+': "'+v+'"</span>')+'</span>'
+        '<span title="'+k+'">'+(v==='—not found—'
+          ? '<span style="color:var(--danger);">'+k+': N/A</span>'
+          : '<span style="color:var(--success-dark);">'+k+': "'+v+'"</span>')+'</span>'
       );
       infoHtml += parts.join(' &bull; ') + '<br>';
     });
@@ -1624,6 +1596,7 @@ async function processRazorpayReports() {
   }
 }
 
+// ─── Preview table now includes Total Payment Amount & Item Amount ───
 function renderRzpTable(rows) {
   const wrap = document.getElementById('rzpTableWrap');
   if (!rows.length) {
@@ -1631,10 +1604,28 @@ function renderRzpTable(rows) {
     return;
   }
 
-  const cols = ['#','Payment Page Title','Payment Date','Order ID','Payment ID','Name','Email','Phone','Settlement UTR','Settlement ID','Settled At','Additional UTR'];
+  // ★ Added 'Total Payment Amount' and 'Item Amount' to preview columns
+  const cols = [
+    '#',
+    'Payment Page Title',
+    'Payment Date',
+    'Order ID',
+    'Payment ID',
+    'Name',
+    'Email',
+    'Phone',
+    'Total Payment Amount',
+    'Item Amount',
+    'Settlement UTR',
+    'Settlement ID',
+    'Settled At',
+    'Additional UTR'
+  ];
+
   const preview = rows.slice(0, 200);
   let html = '<div class="table-wrap" style="max-height:420px;">';
   html += '<table><thead><tr>' + cols.map(c => '<th>'+c+'</th>').join('') + '</tr></thead><tbody>';
+
   preview.forEach((row, i) => {
     const hasSett = row['Settlement UTR'] || row['Settlement ID'] || row['Settled At'] || row['Additional UTR'];
     html += '<tr>';
@@ -1646,12 +1637,17 @@ function renderRzpTable(rows) {
     html += '<td style="font-weight:600;">'+(row['Name']||'-')+'</td>';
     html += '<td>'+(row['Email']||'-')+'</td>';
     html += '<td>'+(row['Phone']||'-')+'</td>';
+    // ★ Amount columns
+    html += '<td style="font-weight:600;color:var(--success-dark);">'+(row['Total Payment Amount']||'-')+'</td>';
+    html += '<td style="font-weight:600;color:var(--warning-dark);">'+(row['Item Amount']||'-')+'</td>';
+    // Settlement columns
     html += '<td style="font-family:monospace;font-size:11px;color:'+(hasSett?'var(--success-dark)':'var(--text-muted)')+';">'+(row['Settlement UTR']||'-')+'</td>';
     html += '<td style="font-family:monospace;font-size:11px;">'+(row['Settlement ID']||'-')+'</td>';
     html += '<td>'+(row['Settled At']||'-')+'</td>';
     html += '<td style="font-family:monospace;font-size:11px;">'+(row['Additional UTR']||'-')+'</td>';
     html += '</tr>';
   });
+
   html += '</tbody></table></div>';
 
   if (rows.length > 200) {
@@ -1660,10 +1656,27 @@ function renderRzpTable(rows) {
   wrap.innerHTML = html;
 }
 
+// ─── Excel download — all 13 columns including both amount fields ───
 function downloadRazorpayExcel() {
   if (!rzpAllRows.length) { alert('No data to download.'); return; }
 
-  const fieldCols = ['Payment Page Title','Payment Date','Order ID','Payment ID','Name','Email','Phone','Settlement UTR','Settlement ID','Settled At','Additional UTR'];
+  // ★ 'Item Amount' key matches exactly what parseRzpWorkbook stores
+  const fieldCols = [
+    'Payment Page Title',
+    'Payment Date',
+    'Order ID',
+    'Payment ID',
+    'Name',
+    'Email',
+    'Phone',
+    'Total Payment Amount',
+    'Item Amount',
+    'Settlement UTR',
+    'Settlement ID',
+    'Settled At',
+    'Additional UTR'
+  ];
+
   const headerRow = ['S.No', ...fieldCols];
   const dataRows  = rzpAllRows.map((r, i) => [i+1, ...fieldCols.map(c => r[c] || '')]);
 
@@ -1730,19 +1743,12 @@ let compareData=null;
 
 async function populateCompareDropdowns(){
   try{
-    // Reuse campus/course data from a quick fetch
     const campusSel=document.getElementById('cmpCampus');
     const courseSel=document.getElementById('cmpCourse');
-    // Copy from dashboard dropdowns if populated
     const dashCampus=document.getElementById('campusFilter');
     const dashCourse=document.getElementById('courseFilter');
-    if(dashCampus.options.length>1){
-      campusSel.innerHTML=dashCampus.innerHTML;
-    }
-    if(dashCourse.options.length>1){
-      courseSel.innerHTML=dashCourse.innerHTML;
-    }
-    // If not populated, fetch
+    if(dashCampus.options.length>1){ campusSel.innerHTML=dashCampus.innerHTML; }
+    if(dashCourse.options.length>1){ courseSel.innerHTML=dashCourse.innerHTML; }
     if(campusSel.options.length<=1||courseSel.options.length<=1){
       const r=await authFetch('/api/students?startDate=2020-01-01&endDate=2030-12-31');
       const d=await r.json();
@@ -1804,17 +1810,15 @@ async function runComparison(){
 
     const y1=d.year1, y2=d.year2, y3=d.year3;
 
-    // Render year header pills
     document.getElementById('cmpPill1').textContent=y1.year;
     document.getElementById('cmpPill2').textContent=y2.year;
     document.getElementById('cmpPill3').textContent=y3.year;
 
-    // Render metric rows (three columns for three years)
     const metrics=[
-      {key:'enquiry',  label:'Enquiries',     cls:'enq'},
+      {key:'enquiry',      label:'Enquiries',     cls:'enq'},
       {key:'registration', label:'Registrations', cls:'reg'},
-      {key:'admission', label:'Admissions',    cls:'adm'},
-      {key:'total',    label:'Total Students', cls:'total'}
+      {key:'admission',    label:'Admissions',    cls:'adm'},
+      {key:'total',        label:'Total Students',cls:'total'}
     ];
 
     let rowsHTML='';
@@ -1840,7 +1844,6 @@ async function runComparison(){
     });
     document.getElementById('cmpMetrics').innerHTML=rowsHTML;
 
-    // Render Summary Table
     let html='<thead><tr><th style="text-align:left;">Metric</th><th>'+y1.year+'</th><th>'+y2.year+'</th><th>'+y3.year+'</th><th>Y1 vs Y2</th><th>Y1 vs Y3</th><th>Y2 vs Y3</th></tr></thead><tbody>';
     const rows=[
       ['Enquiries',y1.enquiry,y2.enquiry,y3.enquiry],
@@ -1849,15 +1852,11 @@ async function runComparison(){
       ['Total',y1.total,y2.total,y3.total]
     ];
     rows.forEach(([label,v1,v2,v3],idx)=>{
-      const diff12=v1-v2;
-      const diff13=v1-v3;
-      const diff23=v2-v3;
+      const diff12=v1-v2, diff13=v1-v3, diff23=v2-v3;
       const diffClass12=diff12>0?'color:#15803d':diff12<0?'color:#b91c1c':'color:var(--text-muted)';
       const diffClass13=diff13>0?'color:#15803d':diff13<0?'color:#b91c1c':'color:var(--text-muted)';
       const diffClass23=diff23>0?'color:#15803d':diff23<0?'color:#b91c1c':'color:var(--text-muted)';
-      const sign12=diff12>0?'+':'';
-      const sign13=diff13>0?'+':'';
-      const sign23=diff23>0?'+':'';
+      const sign12=diff12>0?'+':'', sign13=diff13>0?'+':'', sign23=diff23>0?'+':'';
       const isTotal=idx===rows.length-1;
       html+='<tr'+(isTotal?' class="total-summary-row"':'')+'>';
       html+='<td class="metric-col">'+label+'</td>';
@@ -1871,7 +1870,6 @@ async function runComparison(){
     });
     html+='</tbody>';
     document.getElementById('cmpTable').innerHTML=html;
-
     document.getElementById('compareResults').style.display='block';
   }catch(e){
     alert('Comparison failed: '+e.message);
@@ -1891,7 +1889,6 @@ async function downloadComparisonExcel(){
 
     const wb=XLSX.utils.book_new();
 
-    // Summary sheet
     const summaryRows=[
       ['Metric',String(d.year1.year),String(d.year2.year),String(d.year3.year),'Y1 vs Y2','Y1 vs Y3','Y2 vs Y3'],
       ['Enquiries',d.year1.enquiries.length,d.year2.enquiries.length,d.year3.enquiries.length,d.year1.enquiries.length-d.year2.enquiries.length,d.year1.enquiries.length-d.year3.enquiries.length,d.year2.enquiries.length-d.year3.enquiries.length],
@@ -1899,14 +1896,13 @@ async function downloadComparisonExcel(){
       ['Admissions',d.year1.admissions.length,d.year2.admissions.length,d.year3.admissions.length,d.year1.admissions.length-d.year2.admissions.length,d.year1.admissions.length-d.year3.admissions.length,d.year2.admissions.length-d.year3.admissions.length],
       ['Total',d.year1.enquiries.length+d.year1.registrations.length+d.year1.admissions.length,d.year2.enquiries.length+d.year2.registrations.length+d.year2.admissions.length,d.year3.enquiries.length+d.year3.registrations.length+d.year3.admissions.length]
     ];
-    summaryRows[4].push(summaryRows[4][1]-summaryRows[4][2]); // Total Y1 vs Y2
-    summaryRows[4].push(summaryRows[4][1]-summaryRows[4][3]); // Total Y1 vs Y3
-    summaryRows[4].push(summaryRows[4][2]-summaryRows[4][3]); // Total Y2 vs Y3
+    summaryRows[4].push(summaryRows[4][1]-summaryRows[4][2]);
+    summaryRows[4].push(summaryRows[4][1]-summaryRows[4][3]);
+    summaryRows[4].push(summaryRows[4][2]-summaryRows[4][3]);
     const sws=XLSX.utils.aoa_to_sheet(summaryRows);
     sws['!cols']=[{wch:16},{wch:10},{wch:10},{wch:10},{wch:12},{wch:12},{wch:12}];
     XLSX.utils.book_append_sheet(wb,sws,'Summary');
 
-    // Detail sheets for each year
     function addDetailSheets(yearData,yearLabel){
       const types=[['enquiries','Enquiries'],['registrations','Registrations'],['admissions','Admissions']];
       types.forEach(([key,label])=>{
