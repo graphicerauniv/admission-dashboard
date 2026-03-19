@@ -976,7 +976,7 @@ app.post('/api/meritto/webhook', async (req, res) => {
       const dateOfAdmissionFinal    = dateOfAdmission    || (applicationStatus === 'Admitted'    ? new Date().toISOString().slice(0,10) : '');
 
       const record = {
-        leadId:               get(item, 'lead_id', 'leadId', 'lead_ID', 'lead ID'),  // ← Primary key for all 3 webhook hits
+        leadId:               get(item, 'lead_id', 'leadId', 'lead_ID', 'lead ID'),
         studentId:            get(item, 'student_id', 'studentId', 'application_id', 'applicationId', 'id'),
         name,
         email,
@@ -986,7 +986,15 @@ app.post('/api/meritto/webhook', async (req, res) => {
         fatherName:           get(item, 'father_name', 'fatherName'),
         motherName:           get(item, 'mother_name', 'motherName'),
         category:             get(item, 'category', 'caste_category', 'casteCategory'),
-        courseType:           get(item, 'course_type', 'courseType', 'program_type', 'programType'),
+
+        // Prefer Meritto's course_level; keep course_type for backward compatibility
+        courseType:           get(
+          item,
+          'course_level', 'courseLevel',
+          'course_type', 'courseType',
+          'program_type', 'programType'
+        ),
+
         courseName:           get(item, 'course_name', 'courseName', 'program', 'program_name', 'programName', 'course'),
         intake:               get(item, 'intake', 'batch', 'academic_year', 'academicYear', 'year'),
         applicationStatus,
