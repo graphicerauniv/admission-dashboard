@@ -909,6 +909,7 @@ app.post('/api/migrate-dates', auth, adminOnly, async (req, res) => {
 //
 // All 3 calls use the same lead_id, which groups them as ONE student record.
 // Each call upserts by lead_id, so the DB progressively updates the journey.
+// Fields NOT sent in a webhook call are NEVER overwritten (preserve existing data).
 //
 // Auth: pass the secret as header  X-Meritto-Secret: <token>
 //       OR as query param          ?secret=<token>
@@ -986,15 +987,7 @@ app.post('/api/meritto/webhook', async (req, res) => {
         fatherName:           get(item, 'father_name', 'fatherName'),
         motherName:           get(item, 'mother_name', 'motherName'),
         category:             get(item, 'category', 'caste_category', 'casteCategory'),
-
-        // Prefer Meritto's course_level; keep course_type for backward compatibility
-        courseType:           get(
-          item,
-          'course_level', 'courseLevel',
-          'course_type', 'courseType',
-          'program_type', 'programType'
-        ),
-
+        courseType:           get(item, 'course_level', 'courseLevel', 'course_type', 'courseType', 'program_type', 'programType'),
         courseName:           get(item, 'course_name', 'courseName', 'program', 'program_name', 'programName', 'course'),
         intake:               get(item, 'intake', 'batch', 'academic_year', 'academicYear', 'year'),
         applicationStatus,
@@ -1021,14 +1014,33 @@ app.post('/api/meritto/webhook', async (req, res) => {
         rawData:              item
       };
 
-      // Upsert by lead_id (all 3 webhook hits use this)
+      // ── KEY FIX: Strip all empty/null values from record before upserting.
+      // This ensures that fields Meritto did NOT send will never overwrite
+      // existing data in the DB (e.g. 2nd webhook for registration won't
+      // blank out name/email/mobile that were set by the 1st enquiry webhook).
+      const cleanRecord = Object.fromEntries(
+        Object.entries(record).filter(([_, v]) => {
+          if (v === null || v === undefined || v === '') return false;
+          // Keep parsed dates only if they are valid Date objects (not null from parseDate)
+          if (v instanceof Date && isNaN(v.getTime())) return false;
+          return true;
+        })
+      );
+
+      // Upsert by lead_id (all 3 webhook hits share the same lead_id)
       const leadId = record.leadId;
       if (leadId) {
-        const result = await Student.updateOne({ leadId }, { $set: record }, { upsert: true });
+        // Use $set only for fields present in cleanRecord (non-empty fields from THIS webhook).
+        // Fields absent from cleanRecord are untouched in the DB — no blanking of existing data.
+        const result = await Student.updateOne(
+          { leadId },
+          { $set: cleanRecord },
+          { upsert: true }
+        );
         if (result.upsertedCount > 0) created++; else updated++;
       } else {
-        // Fallback: if no lead_id, create new record (shouldn't happen with proper Meritto setup)
-        await Student.create(record);
+        // Fallback: no lead_id → insert as new record
+        await Student.create(cleanRecord);
         created++;
       }
     }
