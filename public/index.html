@@ -44,6 +44,111 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg)
 .logout-btn{padding:6px 14px;background:rgba(239,68,68,0.15);color:#fca5a5;border:1px solid rgba(239,68,68,0.3);border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;}
 .logout-btn:hover{background:var(--danger);color:white;border-color:var(--danger);}
 
+/* ─── Send Report Button (in navbar) ─── */
+.send-report-btn{
+  padding:7px 14px;
+  background:rgba(16,185,129,0.15);
+  color:#34d399;
+  border:1px solid rgba(16,185,129,0.35);
+  border-radius:6px;
+  font-size:12px;
+  font-weight:700;
+  cursor:pointer;
+  transition:all .2s;
+  display:flex;align-items:center;gap:5px;
+  position:relative;
+}
+.send-report-btn:hover{background:var(--success);color:white;border-color:var(--success);transform:translateY(-1px);box-shadow:0 4px 12px rgba(16,185,129,0.3);}
+.send-report-btn::before{
+  content:'';position:absolute;inset:0;border-radius:6px;
+  box-shadow:0 0 0 0 rgba(16,185,129,0.5);
+  animation:reportPulse 2s ease-in-out infinite;
+}
+@keyframes reportPulse{0%,100%{box-shadow:0 0 0 0 rgba(16,185,129,0.4);}50%{box-shadow:0 0 0 6px rgba(16,185,129,0);}}
+
+/* ─── Report Modal ─── */
+.report-modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,0.75);z-index:200;justify-content:center;align-items:center;backdrop-filter:blur(4px);}
+.report-modal-overlay.show{display:flex;}
+.report-modal{
+  background:var(--primary);
+  border-radius:var(--radius-xl);
+  width:96%;max-width:1100px;
+  max-height:92vh;
+  overflow:hidden;
+  box-shadow:0 25px 50px rgba(0,0,0,0.5);
+  display:flex;flex-direction:column;
+  border:1px solid #334155;
+}
+.report-modal-header{
+  padding:18px 24px;
+  border-bottom:1px solid #334155;
+  display:flex;align-items:center;justify-content:space-between;
+  background:var(--primary-light);
+}
+.report-modal-header h2{color:white;font-size:16px;font-weight:700;display:flex;align-items:center;gap:8px;}
+.report-modal-close{width:32px;height:32px;border-radius:6px;background:rgba(255,255,255,0.08);border:1px solid #475569;color:#94a3b8;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;font-weight:700;}
+.report-modal-close:hover{background:var(--danger);color:white;border-color:var(--danger);transform:none;box-shadow:none;}
+.report-modal-body{display:grid;grid-template-columns:340px 1fr;flex:1;overflow:hidden;}
+.report-left{padding:20px;border-right:1px solid #334155;overflow-y:auto;display:flex;flex-direction:column;gap:18px;}
+.report-right{padding:20px;display:flex;flex-direction:column;gap:12px;background:#0b1120;overflow:hidden;}
+
+/* Chip groups */
+.chip-group-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#64748b;margin-bottom:6px;}
+.chip-wrap{display:flex;flex-wrap:wrap;gap:6px;}
+.chip{
+  padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;
+  border:1.5px solid #334155;color:#94a3b8;background:transparent;
+  transition:all .15s;user-select:none;
+}
+.chip:hover{border-color:#64748b;color:#e2e8f0;}
+.chip.selected-blue{background:rgba(59,130,246,0.2);border-color:#3b82f6;color:#93c5fd;}
+.chip.selected-purple{background:rgba(139,92,246,0.2);border-color:#8b5cf6;color:#c4b5fd;}
+.chip.selected-green{background:rgba(16,185,129,0.2);border-color:#10b981;color:#6ee7b7;}
+.chip.selected-orange{background:rgba(245,158,11,0.2);border-color:#f59e0b;color:#fcd34d;}
+.chip.selected-pink{background:rgba(236,72,153,0.2);border-color:#ec4899;color:#f9a8d4;}
+
+/* Email tag input */
+.tag-input-wrap{
+  display:flex;flex-wrap:wrap;gap:5px;
+  padding:7px 10px;
+  border:1.5px solid #334155;border-radius:var(--radius);
+  background:#0f172a;cursor:text;min-height:42px;
+  align-items:center;
+}
+.tag-input-wrap:focus-within{border-color:var(--accent);}
+.email-tag{
+  display:inline-flex;align-items:center;gap:4px;
+  padding:2px 8px 2px 10px;background:rgba(59,130,246,0.2);
+  border:1px solid rgba(59,130,246,0.4);border-radius:14px;
+  font-size:12px;color:#93c5fd;font-weight:500;
+}
+.email-tag .remove-tag{cursor:pointer;color:#64748b;font-size:14px;line-height:1;padding:0 1px;}
+.email-tag .remove-tag:hover{color:#ef4444;}
+.tag-input-field{border:none;background:transparent;outline:none;font-size:12px;color:#e2e8f0;font-family:inherit;flex:1;min-width:120px;padding:2px 4px;}
+.tag-input-field::placeholder{color:#475569;}
+
+/* Action buttons in report modal */
+.report-action-row{display:flex;gap:8px;align-items:center;}
+.btn-save-settings{padding:9px 16px;background:rgba(59,130,246,0.15);color:#93c5fd;border:1.5px solid rgba(59,130,246,0.4);border-radius:var(--radius);font-size:12px;font-weight:700;cursor:pointer;transition:all .2s;}
+.btn-save-settings:hover{background:var(--accent);color:white;border-color:var(--accent);}
+.btn-send-email{padding:9px 18px;background:var(--success);color:white;border:none;border-radius:var(--radius);font-size:12px;font-weight:700;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:6px;}
+.btn-send-email:hover{background:var(--success-dark);transform:translateY(-1px);}
+.btn-send-email:disabled{opacity:0.5;cursor:not-allowed;transform:none;}
+.saved-pill{padding:4px 10px;background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.3);border-radius:10px;font-size:11px;color:#34d399;font-weight:600;display:none;}
+
+/* Preview area */
+.preview-toolbar{display:flex;align-items:center;justify-content:space-between;}
+.btn-refresh-preview{padding:7px 14px;background:rgba(255,255,255,0.07);color:#94a3b8;border:1.5px solid #334155;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;}
+.btn-refresh-preview:hover{background:rgba(255,255,255,0.12);color:#e2e8f0;}
+.preview-iframe-wrap{flex:1;border-radius:var(--radius);overflow:hidden;border:1px solid #334155;background:white;position:relative;}
+.preview-iframe-wrap iframe{width:100%;height:100%;border:none;display:block;}
+.preview-placeholder{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#475569;gap:8px;}
+.preview-placeholder .ph-icon{font-size:36px;}
+.preview-placeholder p{font-size:13px;color:#64748b;}
+.report-status-msg{padding:10px 14px;border-radius:6px;font-size:12px;font-weight:600;display:none;margin-top:4px;}
+.report-status-msg.success{background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.3);color:#34d399;}
+.report-status-msg.error{background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);color:#f87171;}
+
 /* ─── Main Layout ─── */
 .main-content{max-width:1400px;margin:0 auto;padding:24px;}
 
@@ -226,22 +331,23 @@ tbody tr{transition:background .1s;}
   .nav-links{display:none;}
   .main-content{padding:16px 12px;}
   .admin-grid{grid-template-columns:1fr;}
+  .report-modal-body{grid-template-columns:1fr;max-height:70vh;overflow-y:auto;}
 }
 @media(max-width:480px){
   .card .number{font-size:28px;}
+  .send-report-btn span.btn-label{display:none;}
 }
 
 /* ─── Utility ─── */
 .hidden{display:none!important;}
 .flex-between{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;}
 
-/* ─── Comparison View (Redesigned) ─── */
+/* ─── Comparison View ─── */
 .compare-controls{display:flex;flex-wrap:wrap;gap:12px;align-items:end;}
 .compare-controls .ctrl-group{display:flex;flex-direction:column;gap:4px;}
 .compare-controls .ctrl-group label{font-size:11px;text-transform:uppercase;letter-spacing:0.3px;color:var(--text-muted);font-weight:700;}
 .compare-controls .ctrl-group input,.compare-controls .ctrl-group select{padding:9px 12px;}
 
-/* Header pills */
 .cmp-header{display:flex;align-items:center;justify-content:center;gap:24px;margin-bottom:32px;padding:24px 0;}
 .cmp-year-pill{padding:16px 48px;border-radius:var(--radius-xl);font-size:26px;font-weight:800;color:white;letter-spacing:-0.5px;box-shadow:0 4px 14px rgba(0,0,0,0.15);min-width:160px;text-align:center;}
 .cmp-year-pill.y1{background:linear-gradient(135deg,#3b82f6,#1d4ed8);}
@@ -249,7 +355,6 @@ tbody tr{transition:background .1s;}
 .cmp-year-pill.y3{background:linear-gradient(135deg,#10b981,#047857);}
 .cmp-vs-badge{font-size:15px;font-weight:800;color:var(--text-muted);letter-spacing:3px;text-transform:uppercase;}
 
-/* Metric rows */
 .cmp-metrics{display:flex;flex-direction:column;gap:16px;margin-bottom:28px;}
 .cmp-row{display:grid;grid-template-columns:1fr 1fr 1fr;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-xl);padding:28px 36px;transition:all 0.25s ease;}
 .cmp-row:hover{box-shadow:0 8px 24px rgba(0,0,0,0.06);border-color:#cbd5e1;transform:translateY(-1px);}
@@ -275,30 +380,16 @@ tbody tr{transition:background .1s;}
 .cmp-change.up{background:#dcfce7;color:#15803d;}
 .cmp-change.down{background:#fee2e2;color:#b91c1c;}
 .cmp-change.same{background:var(--bg);color:var(--text-muted);}
-.cmp-pct{font-size:11px;color:var(--text-muted);font-weight:600;margin-top:6px;}
 
-/* Summary Table */
 .compare-summary-table{width:100%;border-collapse:separate;border-spacing:0;font-size:14px;margin-top:20px;}
 .compare-summary-table th{background:linear-gradient(135deg,#0f172a,#1e293b);color:#e2e8f0;padding:14px 18px;text-align:center;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;}
 .compare-summary-table th:first-child{border-radius:var(--radius) 0 0 0;text-align:left;}
 .compare-summary-table th:last-child{border-radius:0 var(--radius) 0 0;}
 .compare-summary-table td{padding:14px 18px;border-bottom:1px solid var(--border);text-align:center;font-size:14px;font-weight:600;}
 .compare-summary-table tr:last-child td{border-bottom:none;}
-.compare-summary-table tr:last-child td:first-child{border-radius:0 0 0 var(--radius);}
-.compare-summary-table tr:last-child td:last-child{border-radius:0 0 var(--radius) 0;}
 .compare-summary-table tr:hover{background:var(--accent-subtle);}
 .compare-summary-table .metric-col{text-align:left;font-weight:700;color:var(--text);}
 .compare-summary-table tr.total-summary-row{background:linear-gradient(135deg,#f0f9ff,#eff6ff);font-weight:800;}
-.compare-summary-table tr.total-summary-row:hover{background:linear-gradient(135deg,#e0f2fe,#dbeafe);}
-
-@media(max-width:768px){
-  .cmp-row{grid-template-columns:1fr;gap:16px;padding:20px;}
-  .cmp-middle::before,.cmp-middle::after{display:none;}
-  .cmp-header{flex-direction:column;gap:12px;}
-  .compare-controls{flex-direction:column;}
-  .cmp-cell .cmp-num{font-size:32px;}
-  .cmp-year-pill{padding:12px 32px;font-size:20px;}
-}
 </style>
 </head>
 <body>
@@ -316,7 +407,7 @@ tbody tr{transition:background .1s;}
 </div>
 </div>
 
-<!-- ═══════════ MAIN APP (hidden until login) ═══════════ -->
+<!-- ═══════════ MAIN APP ═══════════ -->
 <div id="dashboardPage" style="display:none;">
 
 <!-- ── Navbar ── -->
@@ -332,6 +423,10 @@ tbody tr{transition:background .1s;}
     <button class="nav-link admin-only" onclick="window.open('https://automation-vfze.onrender.com/','_blank')" style="display:none;background:rgba(234,88,12,0.18);color:#fb923c;">⚡ Automation</button>
   </div>
   <div class="nav-right">
+    <!-- Send Report button — admin only -->
+    <button class="send-report-btn admin-only" id="sendReportNavBtn" onclick="openReportModal()" style="display:none;">
+      📧 <span class="btn-label">Send Report</span>
+    </button>
     <div class="nav-user">
       <div class="nav-avatar" id="navAvatar">A</div>
       <span id="userName"></span>
@@ -349,8 +444,6 @@ tbody tr{transition:background .1s;}
 
 <!-- ═══════════ DASHBOARD VIEW ═══════════ -->
 <div class="main-content" id="viewDashboard">
-
-  <!-- Date Range Controls -->
   <div class="section-card">
     <div class="section-body">
       <div class="flex-between">
@@ -366,74 +459,40 @@ tbody tr{transition:background .1s;}
     </div>
   </div>
 
-  <!-- Summary Cards -->
   <div class="summary" id="summaryCards" style="display:none;">
     <div class="card card-enquiry active" onclick="showTab('enquiry')">
-      <h3>Enquiries</h3>
-      <div class="number" id="enquiryCount">0</div>
-      <small>by Date of Enquiry</small>
+      <h3>Enquiries</h3><div class="number" id="enquiryCount">0</div><small>by Date of Enquiry</small>
     </div>
     <div class="card card-registration" onclick="showTab('registration')">
-      <h3>Registrations</h3>
-      <div class="number" id="registrationCount">0</div>
-      <small>by Date of Registration</small>
+      <h3>Registrations</h3><div class="number" id="registrationCount">0</div><small>by Date of Registration</small>
     </div>
     <div class="card card-admission" onclick="showTab('admission')">
-      <h3>Admissions</h3>
-      <div class="number" id="admissionCount">0</div>
-      <small>by Date of Admission</small>
+      <h3>Admissions</h3><div class="number" id="admissionCount">0</div><small>by Date of Admission</small>
     </div>
   </div>
 
-  <!-- Data Table Section -->
   <div id="tabSection" style="display:none;">
     <div class="section-card">
       <div class="section-body" style="padding-bottom:0;">
-
-        <!-- Tabs -->
         <div class="tabs no-print">
           <button class="tab-btn active" data-tab="enquiry" onclick="showTab('enquiry')">Enquiries</button>
           <button class="tab-btn" data-tab="registration" onclick="showTab('registration')">Registrations</button>
           <button class="tab-btn" data-tab="admission" onclick="showTab('admission')">Admissions</button>
           <button class="tab-btn" data-tab="all" onclick="showTab('all')">All Combined</button>
         </div>
-
-        <!-- Filters -->
         <div class="filter-bar no-print">
-          <div class="filter-group">
-            <label>Campus</label>
-            <select id="campusFilter" onchange="filterTable()">
-              <option value="">All Campuses</option>
-            </select>
-          </div>
-          <div class="filter-group">
-            <label>Course</label>
-            <select id="courseFilter" onchange="filterTable()">
-              <option value="">All Courses</option>
-            </select>
-          </div>
-          <div class="filter-group">
-            <label>Year</label>
-            <select id="yearFilter" onchange="filterTable()">
-            </select>
-          </div>
+          <div class="filter-group"><label>Campus</label><select id="campusFilter" onchange="filterTable()"><option value="">All Campuses</option></select></div>
+          <div class="filter-group"><label>Course</label><select id="courseFilter" onchange="filterTable()"><option value="">All Courses</option></select></div>
+          <div class="filter-group"><label>Year</label><select id="yearFilter" onchange="filterTable()"></select></div>
         </div>
-
-        <!-- Search -->
         <div class="search-bar no-print">
           <input type="text" id="searchInput" placeholder="Search by name, course, ID, status..." oninput="filterTable()">
         </div>
-
-        <!-- Download Buttons -->
         <div class="download-bar no-print">
           <button class="btn-purple" onclick="downloadCurrentExcel()">⬇ Download Current Tab</button>
           <button class="btn-pink" onclick="downloadAllExcel()">📦 Download All Reports</button>
         </div>
-
-        <!-- Table -->
         <div class="table-wrap" id="tableWrap"></div>
-
-        <!-- Pagination -->
         <div id="paginationBar" class="pagination-bar" style="display:none;">
           <button id="prevBtn" onclick="changePage(-1)" class="btn-outline">◀ Previous</button>
           <span id="pageInfo" class="page-info"></span>
@@ -442,21 +501,14 @@ tbody tr{transition:background .1s;}
       </div>
     </div>
   </div>
+</div>
 
-</div><!-- /viewDashboard -->
-
-<!-- ═══════════ ADMIN VIEW (hidden by default) ═══════════ -->
+<!-- ═══════════ ADMIN VIEW ═══════════ -->
 <div class="main-content hidden" id="viewAdmin">
-
   <div class="admin-grid">
-
-    <!-- Database Management -->
     <div class="section-card admin-only" id="dbStatus" style="display:none;">
       <div class="section-header">
-        <div class="section-title">
-          <span class="icon" style="background:var(--success-light);color:var(--success-dark);">📦</span>
-          Database Management
-        </div>
+        <div class="section-title"><span class="icon" style="background:var(--success-light);color:var(--success-dark);">📦</span>Database Management</div>
         <div class="db-count-badge" id="dbCount">Loading...</div>
       </div>
       <div class="section-body">
@@ -469,16 +521,13 @@ tbody tr{transition:background .1s;}
           </div>
         </div>
         <div id="uploadStatus" class="upload-status" style="margin-top:10px;"></div>
+        <!-- Batch Management -->
       </div>
     </div>
 
-    <!-- User Management -->
     <div class="section-card admin-only" id="userMgmt" style="display:none;">
       <div class="section-header">
-        <div class="section-title">
-          <span class="icon" style="background:var(--purple-light);color:var(--purple-dark);">👥</span>
-          User Management
-        </div>
+        <div class="section-title"><span class="icon" style="background:var(--purple-light);color:var(--purple-dark);">👥</span>User Management</div>
       </div>
       <div class="section-body">
         <div class="user-mgmt-header">
@@ -491,24 +540,16 @@ tbody tr{transition:background .1s;}
         <div id="userListWrap" style="max-height:320px;overflow-y:auto;margin-top:8px;"></div>
       </div>
     </div>
+  </div>
 
-  </div><!-- /admin-grid -->
-
-  <!-- ── Meritto Integration ── -->
+  <!-- Meritto Integration -->
   <div class="section-card admin-only" id="merittoSection" style="display:none;">
     <div class="section-header">
-      <div class="section-title">
-        <span class="icon" style="background:#ede9fe;color:#7c3aed;">🔗</span>
-        Meritto Integration
-      </div>
+      <div class="section-title"><span class="icon" style="background:#ede9fe;color:#7c3aed;">🔗</span>Meritto Integration</div>
       <span id="merittoStatus" style="font-size:12px;font-weight:600;color:var(--text-muted);">Loading...</span>
     </div>
     <div class="section-body">
-      <p style="color:var(--text-muted);font-size:12px;margin-bottom:16px;">
-        Give these details to the Meritto team. They will call the webhook URL every time a student record is created or updated.
-      </p>
-
-      <!-- Webhook URL + Secret -->
+      <p style="color:var(--text-muted);font-size:12px;margin-bottom:16px;">Give these details to the Meritto team.</p>
       <div style="display:grid;gap:12px;margin-bottom:20px;">
         <div style="background:var(--bg);border:1.5px solid var(--border);border-radius:var(--radius);padding:14px 16px;">
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:6px;">📡 Webhook Endpoint (POST)</div>
@@ -518,7 +559,7 @@ tbody tr{transition:background .1s;}
           </div>
         </div>
         <div style="background:var(--bg);border:1.5px solid var(--border);border-radius:var(--radius);padding:14px 16px;">
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:6px;">🔑 Secret Token (send in header: <code>X-Meritto-Secret</code>)</div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:6px;">🔑 Secret Token (header: <code>X-Meritto-Secret</code>)</div>
           <div style="display:flex;align-items:center;gap:8px;">
             <code id="merittoSecret" style="flex:1;font-size:13px;font-weight:600;color:var(--danger);word-break:break-all;"></code>
             <button class="btn-sm btn-outline" onclick="copyMerittoSecret()">Copy</button>
@@ -526,17 +567,15 @@ tbody tr{transition:background .1s;}
         </div>
       </div>
 
-      <!-- Required Fields table -->
+      <!-- Fields reference table -->
       <div style="font-size:12px;font-weight:700;color:var(--text-secondary);margin-bottom:8px;">📋 Fields to send in JSON body (all optional except name):</div>
       <div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);">
         <table style="width:100%;border-collapse:collapse;font-size:12px;">
-          <thead>
-            <tr style="background:var(--primary-light);">
-              <th style="padding:9px 14px;text-align:left;color:#e2e8f0;font-size:11px;text-transform:uppercase;letter-spacing:0.4px;">Field Name</th>
-              <th style="padding:9px 14px;text-align:left;color:#e2e8f0;font-size:11px;text-transform:uppercase;letter-spacing:0.4px;">Example Value</th>
-              <th style="padding:9px 14px;text-align:left;color:#e2e8f0;font-size:11px;text-transform:uppercase;letter-spacing:0.4px;">Notes</th>
-            </tr>
-          </thead>
+          <thead><tr style="background:var(--primary-light);">
+            <th style="padding:9px 14px;text-align:left;color:#e2e8f0;font-size:11px;text-transform:uppercase;letter-spacing:0.4px;">Field Name</th>
+            <th style="padding:9px 14px;text-align:left;color:#e2e8f0;font-size:11px;text-transform:uppercase;letter-spacing:0.4px;">Example Value</th>
+            <th style="padding:9px 14px;text-align:left;color:#e2e8f0;font-size:11px;text-transform:uppercase;letter-spacing:0.4px;">Notes</th>
+          </tr></thead>
           <tbody id="merittoFieldsTable">
             <tr><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"><code>name</code></td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);">Ravi Sharma</td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);color:var(--danger);font-weight:600;">Required</td></tr>
             <tr style="background:var(--bg);"><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"><code>first_name</code> / <code>last_name</code></td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);">Ravi / Sharma</td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);">Alternative to name</td></tr>
@@ -547,7 +586,7 @@ tbody tr{transition:background .1s;}
             <tr><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"><code>course_level</code></td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);">UG</td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"></td></tr>
             <tr style="background:var(--bg);"><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"><code>campus</code> / <code>center_name</code></td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);">GEU Dehradun</td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"></td></tr>
             <tr><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"><code>lead_stage</code> / <code>status</code></td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);">enquiry / registration / admission</td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);">Controls date type</td></tr>
-            <tr style="background:var(--bg);"><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"><code>date_of_enquiry</code> / <code>enquiry_date</code></td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);">2026-01-15</td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);">YYYY-MM-DD preferred</td></tr>
+            <tr style="background:var(--bg);"><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"><code>date_of_enquiry</code></td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);">2026-01-15</td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);">YYYY-MM-DD preferred</td></tr>
             <tr><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"><code>date_of_registration</code></td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);">2026-02-10</td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"></td></tr>
             <tr style="background:var(--bg);"><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"><code>date_of_admission</code></td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);">2026-03-01</td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"></td></tr>
             <tr><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"><code>gender</code></td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);">Male / Female</td><td style="padding:8px 14px;border-bottom:1px solid var(--border-light);"></td></tr>
@@ -558,7 +597,6 @@ tbody tr{transition:background .1s;}
         </table>
       </div>
 
-      <!-- Sample payload -->
       <details style="margin-top:14px;">
         <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--accent);">📎 Sample JSON payload (click to expand)</summary>
         <pre style="margin-top:8px;background:var(--primary);color:#e2e8f0;padding:14px;border-radius:var(--radius);font-size:11px;overflow-x:auto;line-height:1.6;">{
@@ -581,7 +619,6 @@ tbody tr{transition:background .1s;}
 }</pre>
       </details>
 
-      <!-- Sync stats -->
       <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--border);">
         <div id="merittoCount" style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:var(--purple-light);border:1px solid #c4b5fd;border-radius:20px;font-size:14px;font-weight:700;color:var(--purple-dark);">— records from Meritto</div>
         <div id="merittoLastSync" style="font-size:12px;color:var(--text-muted);font-weight:500;"></div>
@@ -590,29 +627,17 @@ tbody tr{transition:background .1s;}
     </div>
   </div>
 
-  <!-- ── Razorpay Payment Reports ── -->
+  <!-- Razorpay -->
   <div class="section-card admin-only" id="razorpaySection" style="display:none;">
     <div class="section-header">
-      <div class="section-title">
-        <span class="icon" style="background:#fff7ed;color:#ea580c;">💳</span>
-        Razorpay Payment Reports
-      </div>
+      <div class="section-title"><span class="icon" style="background:#fff7ed;color:#ea580c;">💳</span>Razorpay Payment Reports</div>
       <span id="rzpStatus" style="font-size:12px;font-weight:600;"></span>
     </div>
     <div class="section-body">
-      <p style="color:var(--text-muted);font-size:12px;margin-bottom:16px;">
-        Upload one or two Razorpay Excel / CSV reports. The system will auto-detect columns and extract:
-        <strong>Payment Page Title, Payment Date, Order ID, Payment ID, Name, Email, Phone, Total Payment Amount, Item Amount</strong>.
-      </p>
+      <p style="color:var(--text-muted);font-size:12px;margin-bottom:16px;">Upload one or two Razorpay Excel / CSV reports. Auto-detects columns.</p>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px;">
-        <div>
-          <label style="display:block;margin-bottom:6px;">📄 Report 1</label>
-          <input type="file" id="rzpFile1" accept=".xlsx,.xls,.csv">
-        </div>
-        <div>
-          <label style="display:block;margin-bottom:6px;">📄 Report 2 <span style="font-weight:400;color:var(--text-muted);">(optional)</span></label>
-          <input type="file" id="rzpFile2" accept=".xlsx,.xls,.csv">
-        </div>
+        <div><label style="display:block;margin-bottom:6px;">📄 Report 1</label><input type="file" id="rzpFile1" accept=".xlsx,.xls,.csv"></div>
+        <div><label style="display:block;margin-bottom:6px;">📄 Report 2 <span style="font-weight:400;color:var(--text-muted);">(optional)</span></label><input type="file" id="rzpFile2" accept=".xlsx,.xls,.csv"></div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px;">
         <button onclick="processRazorpayReports()" style="background:#ea580c;">⚡ Process Reports</button>
@@ -623,78 +648,29 @@ tbody tr{transition:background .1s;}
       <div id="rzpTableWrap" style="margin-top:12px;"></div>
     </div>
   </div>
-
-</div><!-- /viewAdmin -->
+</div>
 
 <!-- ═══════════ COMPARE VIEW ═══════════ -->
 <div class="main-content hidden" id="viewCompare">
-
-  <!-- Compare Controls -->
   <div class="section-card">
     <div class="section-header">
-      <div class="section-title">
-        <span class="icon" style="background:var(--accent-light);color:var(--accent);">📊</span>
-        Three-Year Comparison Analysis
-      </div>
+      <div class="section-title"><span class="icon" style="background:var(--accent-light);color:var(--accent);">📊</span>Three-Year Comparison Analysis</div>
     </div>
     <div class="section-body">
       <div class="compare-controls">
-        <div class="ctrl-group">
-          <label>From Date</label>
-          <input type="date" id="cmpStartDate">
-        </div>
-        <div class="ctrl-group">
-          <label>To Date</label>
-          <input type="date" id="cmpEndDate">
-        </div>
-        <div class="ctrl-group">
-          <label>Year 1</label>
-          <select id="cmpYear1">
-            <option value="2024">2024</option>
-            <option value="2025" selected>2025</option>
-            <option value="2026">2026</option>
-          </select>
-        </div>
-        <div class="ctrl-group">
-          <label>Year 2</label>
-          <select id="cmpYear2">
-            <option value="2023">2023</option>
-            <option value="2024" selected>2024</option>
-            <option value="2025">2025</option>
-            <option value="2026">2026</option>
-          </select>
-        </div>
-        <div class="ctrl-group">
-          <label>Year 3</label>
-          <select id="cmpYear3">
-            <option value="2022">2022</option>
-            <option value="2023" selected>2023</option>
-            <option value="2024">2024</option>
-            <option value="2025">2025</option>
-            <option value="2026">2026</option>
-          </select>
-        </div>
-        <div class="ctrl-group">
-          <label>Campus</label>
-          <select id="cmpCampus">
-            <option value="">All Campuses</option>
-          </select>
-        </div>
-        <div class="ctrl-group">
-          <label>Course</label>
-          <select id="cmpCourse">
-            <option value="">All Courses</option>
-          </select>
-        </div>
+        <div class="ctrl-group"><label>From Date</label><input type="date" id="cmpStartDate"></div>
+        <div class="ctrl-group"><label>To Date</label><input type="date" id="cmpEndDate"></div>
+        <div class="ctrl-group"><label>Year 1</label><select id="cmpYear1"><option value="2024">2024</option><option value="2025" selected>2025</option><option value="2026">2026</option></select></div>
+        <div class="ctrl-group"><label>Year 2</label><select id="cmpYear2"><option value="2023">2023</option><option value="2024" selected>2024</option><option value="2025">2025</option><option value="2026">2026</option></select></div>
+        <div class="ctrl-group"><label>Year 3</label><select id="cmpYear3"><option value="2022">2022</option><option value="2023" selected>2023</option><option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option></select></div>
+        <div class="ctrl-group"><label>Campus</label><select id="cmpCampus"><option value="">All Campuses</option></select></div>
+        <div class="ctrl-group"><label>Course</label><select id="cmpCourse"><option value="">All Courses</option></select></div>
         <button onclick="runComparison()" style="align-self:end;">Compare</button>
       </div>
     </div>
   </div>
 
-  <!-- Compare Results -->
   <div id="compareResults" style="display:none;">
-
-    <!-- Year Header Pills -->
     <div class="cmp-header">
       <div class="cmp-year-pill y1" id="cmpPill1"></div>
       <div class="cmp-vs-badge">VS</div>
@@ -702,29 +678,16 @@ tbody tr{transition:background .1s;}
       <div class="cmp-vs-badge">VS</div>
       <div class="cmp-year-pill y3" id="cmpPill3"></div>
     </div>
-
-    <!-- Metric Rows (balanced both sides) -->
     <div class="cmp-metrics" id="cmpMetrics"></div>
-
-    <!-- Summary Table -->
     <div class="section-card">
       <div class="section-header">
-        <div class="section-title">
-          <span class="icon" style="background:var(--info-light);color:var(--info);">📋</span>
-          Comparison Summary
-        </div>
+        <div class="section-title"><span class="icon" style="background:var(--info-light);color:var(--info);">📋</span>Comparison Summary</div>
         <button class="btn-purple" onclick="downloadComparisonExcel()">⬇ Download Comparison</button>
       </div>
-      <div class="section-body" style="padding:0;">
-        <div style="overflow-x:auto;">
-          <table class="compare-summary-table" id="cmpTable"></table>
-        </div>
-      </div>
+      <div class="section-body" style="padding:0;"><div style="overflow-x:auto;"><table class="compare-summary-table" id="cmpTable"></table></div></div>
     </div>
-
-  </div><!-- /compareResults -->
-
-</div><!-- /viewCompare -->
+  </div>
+</div>
 
 </div><!-- /dashboardPage -->
 
@@ -737,7 +700,95 @@ tbody tr{transition:background .1s;}
 </div>
 </div>
 
-<!-- SheetJS for Excel export -->
+<!-- ═══════════ SEND REPORT MODAL ═══════════ -->
+<div class="report-modal-overlay" id="reportModalOverlay" onclick="closeReportModal(event)">
+<div class="report-modal" onclick="event.stopPropagation()">
+
+  <!-- Header -->
+  <div class="report-modal-header">
+    <h2>📧 Send Admission Report</h2>
+    <button class="report-modal-close" onclick="closeReportModal()">&times;</button>
+  </div>
+
+  <!-- Body: Left settings + Right preview -->
+  <div class="report-modal-body">
+
+    <!-- ── Left Panel: Settings ── -->
+    <div class="report-left">
+
+      <!-- Year Selection -->
+      <div>
+        <div class="chip-group-label">Select Years (pick 2–3)</div>
+        <div class="chip-wrap" id="yearChips">
+          <span class="chip" data-year="2022" onclick="toggleYearChip(this)">2022</span>
+          <span class="chip" data-year="2023" onclick="toggleYearChip(this)">2023</span>
+          <span class="chip selected-purple" data-year="2024" onclick="toggleYearChip(this)">2024</span>
+          <span class="chip selected-blue" data-year="2025" onclick="toggleYearChip(this)">2025</span>
+          <span class="chip selected-green" data-year="2026" onclick="toggleYearChip(this)">2026</span>
+        </div>
+      </div>
+
+      <!-- Campus Selection -->
+      <div>
+        <div class="chip-group-label">Select Campuses (min 1)</div>
+        <div class="chip-wrap" id="campusChips">
+          <span class="chip selected-blue" data-campus="GEU" onclick="toggleCampusChip(this)">GEU</span>
+          <span class="chip selected-green" data-campus="GEHU" onclick="toggleCampusChip(this)">GEHU (All)</span>
+          <span class="chip" data-campus="GEHUDDN" onclick="toggleCampusChip(this)">GEHU-Dehradun</span>
+          <span class="chip" data-campus="GEHUHLD" onclick="toggleCampusChip(this)">GEHU-Haldwani</span>
+          <span class="chip" data-campus="GEHUBTL" onclick="toggleCampusChip(this)">GEHU-Bhimtal</span>
+        </div>
+      </div>
+
+      <!-- To: emails -->
+      <div>
+        <div class="chip-group-label">To: Recipients</div>
+        <div class="tag-input-wrap" id="toTagWrap" onclick="document.getElementById('toTagInput').focus()">
+          <input class="tag-input-field" id="toTagInput" placeholder="Type email, press Enter…" onkeydown="handleTagKey(event,'to')" oninput="handleTagInput(event,'to')">
+        </div>
+      </div>
+
+      <!-- CC: emails -->
+      <div>
+        <div class="chip-group-label">CC: (optional)</div>
+        <div class="tag-input-wrap" id="ccTagWrap" onclick="document.getElementById('ccTagInput').focus()">
+          <input class="tag-input-field" id="ccTagInput" placeholder="Type email, press Enter…" onkeydown="handleTagKey(event,'cc')" oninput="handleTagInput(event,'cc')">
+        </div>
+      </div>
+
+      <!-- Action buttons -->
+      <div class="report-action-row">
+        <button class="btn-save-settings" onclick="saveReportSettings()">💾 Save Settings</button>
+        <span class="saved-pill" id="savedPill">✓ Saved!</span>
+      </div>
+      <button class="btn-send-email" id="sendEmailBtn" onclick="sendReport()">
+        <span id="sendBtnIcon">🚀</span> Send Report via Email
+      </button>
+
+      <!-- Status message -->
+      <div class="report-status-msg" id="reportStatusMsg"></div>
+
+    </div><!-- /report-left -->
+
+    <!-- ── Right Panel: Preview ── -->
+    <div class="report-right">
+      <div class="preview-toolbar">
+        <span style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Email Preview</span>
+        <button class="btn-refresh-preview" onclick="refreshPreview()">🔄 Refresh Preview</button>
+      </div>
+      <div class="preview-iframe-wrap" id="previewWrap">
+        <div class="preview-placeholder" id="previewPlaceholder">
+          <div class="ph-icon">📬</div>
+          <p>Click "Refresh Preview" to see the email</p>
+        </div>
+        <iframe id="previewIframe" style="display:none;width:100%;height:100%;border:none;"></iframe>
+      </div>
+    </div>
+
+  </div><!-- /report-modal-body -->
+</div><!-- /report-modal -->
+</div><!-- /report-modal-overlay -->
+
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
 <script>
@@ -747,7 +798,9 @@ let searchTimer=null;
 let authToken=null;
 let userRole=null;
 
-// ─── Auth Helpers ───
+// ── Email report state ──
+let toEmails=[], ccEmails=[];
+
 function getToken(){ return localStorage.getItem('authToken'); }
 function setToken(token){ localStorage.setItem('authToken',token); authToken=token; }
 function clearToken(){ localStorage.removeItem('authToken'); localStorage.removeItem('userRole'); localStorage.removeItem('userName'); authToken=null; userRole=null; }
@@ -765,37 +818,24 @@ function authFetch(url, opts={}){
   });
 }
 
-// ─── Login / Logout ───
 async function doLogin(){
   const email=document.getElementById('loginEmail').value.trim();
   const password=document.getElementById('loginPassword').value;
   const errEl=document.getElementById('loginError');
   errEl.textContent='';
-
   if(!email||!password){ errEl.textContent='Please enter email and password.'; return; }
-
   try{
-    const r=await fetch('/api/login',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({email,password})
-    });
+    const r=await fetch('/api/login',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({email,password}) });
     const d=await r.json();
     if(!r.ok){ errEl.textContent=d.error||'Login failed'; return; }
-
     setToken(d.token);
     localStorage.setItem('userRole',d.role);
     localStorage.setItem('userName',d.name||d.email);
     showDashboard(d.role, d.name||d.email);
-  }catch(e){
-    errEl.textContent='Login failed: '+e.message;
-  }
+  }catch(e){ errEl.textContent='Login failed: '+e.message; }
 }
 
-function doLogout(){
-  clearToken();
-  showLoginPage();
-}
+function doLogout(){ clearToken(); showLoginPage(); }
 
 function showLoginPage(){
   document.getElementById('loginPage').style.display='flex';
@@ -809,55 +849,31 @@ function showDashboard(role, name){
   userRole=role;
   document.getElementById('loginPage').style.display='none';
   document.getElementById('dashboardPage').style.display='block';
-
   document.getElementById('userName').textContent=name;
   const roleEl=document.getElementById('userRole');
   roleEl.textContent=role.toUpperCase();
   roleEl.className='nav-role '+(role==='admin'?'role-admin':'role-user');
-
   const initials=name.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
   document.getElementById('navAvatar').textContent=initials||'U';
-
-  document.querySelectorAll('.admin-only').forEach(el=>{
-    el.style.display=role==='admin'?'':'none';
-  });
-
+  document.querySelectorAll('.admin-only').forEach(el=>{ el.style.display=role==='admin'?'':'none'; });
   switchView('dashboard');
-
   loadDBCount();
-  if(role==='admin'){ loadUserList(); loadMerittoInfo(); }
+  if(role==='admin'){ loadUserList(); loadMerittoInfo(); loadBatches(); }
 }
 
-// ─── View Switching ───
 function switchView(view){
-  const dash=document.getElementById('viewDashboard');
-  const admin=document.getElementById('viewAdmin');
-  const compare=document.getElementById('viewCompare');
-  const navDash=document.getElementById('navDashboard');
-  const navAdmin=document.getElementById('navAdmin');
-  const navCompare=document.getElementById('navCompare');
+  document.getElementById('viewDashboard').classList.add('hidden');
+  document.getElementById('viewAdmin').classList.add('hidden');
+  document.getElementById('viewCompare').classList.add('hidden');
+  document.getElementById('navDashboard').classList.remove('active');
+  document.getElementById('navAdmin').classList.remove('active');
+  document.getElementById('navCompare').classList.remove('active');
 
-  dash.classList.add('hidden');
-  admin.classList.add('hidden');
-  compare.classList.add('hidden');
-  navDash.classList.remove('active');
-  navAdmin.classList.remove('active');
-  navCompare.classList.remove('active');
-
-  if(view==='admin'){
-    admin.classList.remove('hidden');
-    navAdmin.classList.add('active');
-  }else if(view==='compare'){
-    compare.classList.remove('hidden');
-    navCompare.classList.add('active');
-    populateCompareDropdowns();
-  }else{
-    dash.classList.remove('hidden');
-    navDash.classList.add('active');
-  }
+  if(view==='admin'){ document.getElementById('viewAdmin').classList.remove('hidden'); document.getElementById('navAdmin').classList.add('active'); }
+  else if(view==='compare'){ document.getElementById('viewCompare').classList.remove('hidden'); document.getElementById('navCompare').classList.add('active'); populateCompareDropdowns(); }
+  else{ document.getElementById('viewDashboard').classList.remove('hidden'); document.getElementById('navDashboard').classList.add('active'); }
 }
 
-// ─── Auto-login if token exists ───
 (function checkSession(){
   const token=getToken();
   if(token){
@@ -866,81 +882,79 @@ function switchView(view){
     const name=localStorage.getItem('userName')||'User';
     fetch('/api/count',{headers:{'Authorization':'Bearer '+token}}).then(r=>{
       hideLoading();
-      if(r.ok){ showDashboard(role,name); }
-      else{ clearToken(); showLoginPage(); }
+      if(r.ok){ showDashboard(role,name); } else { clearToken(); showLoginPage(); }
     }).catch(()=>{ hideLoading(); showLoginPage(); });
-  }else{
-    showLoginPage();
-  }
+  }else{ showLoginPage(); }
 })();
 
-function showLoading(text){
-  document.getElementById('loadingText').textContent=text||'Loading data...';
-  document.getElementById('loadingOverlay').classList.add('show');
-}
-function hideLoading(){
-  document.getElementById('loadingOverlay').classList.remove('show');
-}
+function showLoading(text){ document.getElementById('loadingText').textContent=text||'Loading data...'; document.getElementById('loadingOverlay').classList.add('show'); }
+function hideLoading(){ document.getElementById('loadingOverlay').classList.remove('show'); }
 
 async function loadDBCount(){
-  try{
-    const r=await authFetch('/api/count');
-    const d=await r.json();
-    document.getElementById('dbCount').textContent=d.count+' records';
-  }catch(e){document.getElementById('dbCount').textContent='Error';}
+  try{ const r=await authFetch('/api/count'); const d=await r.json(); document.getElementById('dbCount').textContent=d.count+' records'; }
+  catch(e){ document.getElementById('dbCount').textContent='Error'; }
 }
 
 async function uploadCSV(){
   const file=document.getElementById('csvUpload').files[0];
   if(!file){alert('Select a CSV file first.');return;}
   const status=document.getElementById('uploadStatus');
-  status.textContent='Uploading...';
-  status.style.color='#ff9800';
+  status.textContent='Uploading...'; status.style.color='#ff9800';
   showLoading('Uploading CSV to database...');
-
-  const formData=new FormData();
-  formData.append('csvFile',file);
-
+  const formData=new FormData(); formData.append('csvFile',file);
   try{
     const r=await authFetch('/api/upload',{method:'POST',body:formData});
     const d=await r.json();
-    if(d.success){
-      status.textContent='✓ '+d.count+' students uploaded!';
-      status.style.color='#28a745';
-      loadDBCount();
-      document.getElementById('csvUpload').value='';
-    }else{
-      status.textContent='✗ '+d.error;
-      status.style.color='#dc3545';
-    }
-  }catch(e){
-    status.textContent='✗ Upload failed';
-    status.style.color='#dc3545';
-  }finally{hideLoading();}
+    if(d.success){ status.textContent='✓ '+d.count+' students uploaded!'; status.style.color='#28a745'; loadDBCount(); loadBatches(); document.getElementById('csvUpload').value=''; }
+    else{ status.textContent='✗ '+d.error; status.style.color='#dc3545'; }
+  }catch(e){ status.textContent='✗ Upload failed'; status.style.color='#dc3545'; }
+  finally{ hideLoading(); }
 }
 
 async function migrateDates(){
   showLoading('Migrating old records...');
   const status=document.getElementById('uploadStatus');
+  try{ const r=await authFetch('/api/migrate-dates',{method:'POST'}); const d=await r.json(); status.textContent='✓ Migrated '+d.migrated+' records'; status.style.color='#28a745'; }
+  catch(e){ status.textContent='✗ Migration failed'; status.style.color='#dc3545'; }
+  finally{ hideLoading(); }
+}
+
+
+// ─── Batch Management ───
+async function loadBatches(){
   try{
-    const r=await authFetch('/api/migrate-dates',{method:'POST'});
+    const r=await authFetch('/api/batches');
+    const batches=await r.json();
+    const wrap=document.getElementById('batchListWrap');
+    if(!batches.length){ wrap.innerHTML='<p style="color:var(--text-muted);font-size:12px;">No batches uploaded yet.</p>'; return; }
+    let html='<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:var(--bg);"><th style="padding:7px 10px;text-align:left;color:var(--text-muted);font-weight:600;font-size:11px;text-transform:uppercase;">Batch ID</th><th style="padding:7px 10px;text-align:center;color:var(--text-muted);font-weight:600;font-size:11px;text-transform:uppercase;">Records</th><th style="padding:7px 10px;text-align:left;color:var(--text-muted);font-weight:600;font-size:11px;text-transform:uppercase;">Uploaded</th><th style="padding:7px 10px;text-align:center;color:var(--text-muted);font-weight:600;font-size:11px;text-transform:uppercase;">Action</th></tr></thead><tbody>';
+    batches.forEach(b=>{
+      const isMe=b._id&&b._id.startsWith('meritto_');
+      const label=isMe?'🔗 Meritto':'📁 CSV';
+      const date=b.firstUpload?new Date(b.firstUpload).toLocaleString('en-IN',{day:'2-digit',month:'short',year:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
+      html+='<tr style="border-bottom:1px solid var(--border-light);"><td style="padding:7px 10px;"><span style="font-size:11px;color:var(--text-muted);">'+(label)+'</span> <code style="font-size:10px;color:var(--accent);">'+(b._id||'?')+'</code></td><td style="padding:7px 10px;text-align:center;font-weight:700;color:var(--text);">'+(b.count||0)+'</td><td style="padding:7px 10px;font-size:11px;color:var(--text-muted);">'+(date)+'</td><td style="padding:7px 10px;text-align:center;"><button class="btn-sm btn-danger" style="font-size:10px;padding:3px 8px;" onclick="deleteBatch(\''+b._id+'\','+b.count+')">Delete</button></td></tr>';
+    });
+    html+='</tbody></table>';
+    wrap.innerHTML=html;
+  }catch(e){}
+}
+
+async function deleteBatch(batchId, count){
+  if(!confirm('Delete batch "'+batchId+'" with '+count+' records? This cannot be undone.')) return;
+  showLoading('Deleting batch...');
+  try{
+    const r=await authFetch('/api/batch/'+encodeURIComponent(batchId),{method:'DELETE'});
     const d=await r.json();
-    status.textContent='✓ Migrated '+d.migrated+' records';
-    status.style.color='#28a745';
-  }catch(e){
-    status.textContent='✗ Migration failed';
-    status.style.color='#dc3545';
-  }finally{hideLoading();}
+    loadBatches(); loadDBCount();
+    document.getElementById('uploadStatus').textContent='✓ Deleted '+d.deleted+' records'; document.getElementById('uploadStatus').style.color='#28a745';
+  }catch(e){ alert('Delete failed: '+e.message); }
+  finally{ hideLoading(); }
 }
 
 function getQueryParams(tab, page){
-  const sv=document.getElementById('startDate').value;
-  const ev=document.getElementById('endDate').value;
+  const sv=document.getElementById('startDate').value, ev=document.getElementById('endDate').value;
   let params='startDate='+sv+'&endDate='+ev+'&tab='+(tab||currentTab)+'&page='+(page||1)+'&limit=30';
-  const campus=document.getElementById('campusFilter').value;
-  const course=document.getElementById('courseFilter').value;
-  const year=document.getElementById('yearFilter').value;
-  const search=document.getElementById('searchInput').value.trim();
+  const campus=document.getElementById('campusFilter').value, course=document.getElementById('courseFilter').value, year=document.getElementById('yearFilter').value, search=document.getElementById('searchInput').value.trim();
   if(campus) params+='&campus='+encodeURIComponent(campus);
   if(course) params+='&course='+encodeURIComponent(course);
   if(year) params+='&year='+encodeURIComponent(year);
@@ -949,15 +963,12 @@ function getQueryParams(tab, page){
 }
 
 async function loadFromDB(){
-  const sv=document.getElementById('startDate').value;
-  const ev=document.getElementById('endDate').value;
+  const sv=document.getElementById('startDate').value, ev=document.getElementById('endDate').value;
   if(!sv||!ev){alert('Please select both Start Date and End Date.');return;}
   showLoading('Fetching summary...');
-
   try{
     const r=await authFetch('/api/students?startDate='+sv+'&endDate='+ev);
     const d=await r.json();
-
     document.getElementById('enquiryCount').innerText=d.enquiryCount||0;
     document.getElementById('registrationCount').innerText=d.registrationCount||0;
     document.getElementById('admissionCount').innerText=d.admissionCount||0;
@@ -965,9 +976,7 @@ async function loadFromDB(){
     let campusSel=document.getElementById('campusFilter');
     campusSel.innerHTML='<option value="">All Campuses</option>';
     const gehuCampuses=(d.campuses||[]).filter(c=>c.toLowerCase().includes('gehu'));
-    if(gehuCampuses.length>1){
-      campusSel.innerHTML+='<option value="GEHU" style="font-weight:700;">⭐ GEHU (All Campuses)</option>';
-    }
+    if(gehuCampuses.length>1) campusSel.innerHTML+='<option value="GEHU" style="font-weight:700;">⭐ GEHU (All Campuses)</option>';
     (d.campuses||[]).forEach(c=>{campusSel.innerHTML+='<option value="'+c+'">'+c+'</option>';});
 
     let courseSel=document.getElementById('courseFilter');
@@ -980,59 +989,38 @@ async function loadFromDB(){
 
     document.getElementById('summaryCards').style.display='flex';
     document.getElementById('tabSection').style.display='block';
-    currentTab='enquiry';
-    currentPage=1;
-
+    currentTab='enquiry'; currentPage=1;
     try{
       const pr=await authFetch('/api/students/page?'+getQueryParams('enquiry',1));
       const pd=await pr.json();
-      totalPages=pd.totalPages||1;
-      totalRecords=pd.total||0;
+      totalPages=pd.totalPages||1; totalRecords=pd.total||0;
       document.querySelectorAll('.tab-btn').forEach(b=>{b.classList.toggle('active',b.dataset.tab==='enquiry');});
       let cards=document.querySelectorAll('.summary .card');
-      cards[0].classList.add('active');
-      cards[1].classList.remove('active');
-      cards[2].classList.remove('active');
-      renderTable(pd.students||[]);
-      updatePagination();
+      cards[0].classList.add('active'); cards[1].classList.remove('active'); cards[2].classList.remove('active');
+      renderTable(pd.students||[]); updatePagination();
     }catch(pe){}
-  }catch(e){
-    alert('Error loading data: '+e.message);
-  }finally{hideLoading();}
+  }catch(e){ alert('Error loading data: '+e.message); }
+  finally{ hideLoading(); }
 }
 
 async function loadPage(page){
-  const sv=document.getElementById('startDate').value;
-  const ev=document.getElementById('endDate').value;
+  const sv=document.getElementById('startDate').value, ev=document.getElementById('endDate').value;
   if(!sv||!ev) return;
-
-  currentPage=page||1;
-  showLoading('Loading...');
-
+  currentPage=page||1; showLoading('Loading...');
   try{
     const r=await authFetch('/api/students/page?'+getQueryParams(currentTab, currentPage));
     const d=await r.json();
-
-    totalPages=d.totalPages||1;
-    totalRecords=d.total||0;
-    renderTable(d.students||[]);
-    updatePagination();
-  }catch(e){
-    document.getElementById('tableWrap').innerHTML='<div class="no-data">Error loading data: '+e.message+'</div>';
-  }finally{hideLoading();}
+    totalPages=d.totalPages||1; totalRecords=d.total||0;
+    renderTable(d.students||[]); updatePagination();
+  }catch(e){ document.getElementById('tableWrap').innerHTML='<div class="no-data">Error loading data: '+e.message+'</div>'; }
+  finally{ hideLoading(); }
 }
 
 async function updateFilteredCounts(){
-  const sv=document.getElementById('startDate').value;
-  const ev=document.getElementById('endDate').value;
+  const sv=document.getElementById('startDate').value, ev=document.getElementById('endDate').value;
   if(!sv||!ev) return;
-
-  const campus=document.getElementById('campusFilter').value;
-  const course=document.getElementById('courseFilter').value;
-  const year=document.getElementById('yearFilter').value;
-  const search=document.getElementById('searchInput').value.trim();
-
-  if(!campus&&!course&&!year&&!search) {
+  const campus=document.getElementById('campusFilter').value, course=document.getElementById('courseFilter').value, year=document.getElementById('yearFilter').value, search=document.getElementById('searchInput').value.trim();
+  if(!campus&&!course&&!year&&!search){
     const r=await authFetch('/api/students?startDate='+sv+'&endDate='+ev);
     const d=await r.json();
     document.getElementById('enquiryCount').innerText=d.enquiryCount||0;
@@ -1040,9 +1028,8 @@ async function updateFilteredCounts(){
     document.getElementById('admissionCount').innerText=d.admissionCount||0;
     return;
   }
-
   try{
-    const [enqR, regR, admR] = await Promise.all([
+    const [enqR,regR,admR]=await Promise.all([
       authFetch('/api/students/page?'+getQueryParams('enquiry',1)+'&limit=1').then(r=>r.json()),
       authFetch('/api/students/page?'+getQueryParams('registration',1)+'&limit=1').then(r=>r.json()),
       authFetch('/api/students/page?'+getQueryParams('admission',1)+'&limit=1').then(r=>r.json())
@@ -1055,7 +1042,7 @@ async function updateFilteredCounts(){
 
 function updatePagination(){
   const bar=document.getElementById('paginationBar');
-  if(totalPages<=1 && totalRecords<=30){bar.style.display='none';return;}
+  if(totalPages<=1&&totalRecords<=30){bar.style.display='none';return;}
   bar.style.display='flex';
   document.getElementById('pageInfo').textContent='Page '+currentPage+' of '+totalPages+' ('+totalRecords+' records)';
   document.getElementById('prevBtn').disabled=currentPage<=1;
@@ -1064,113 +1051,58 @@ function updatePagination(){
   document.getElementById('nextBtn').style.opacity=currentPage>=totalPages?'0.5':'1';
 }
 
-function changePage(delta){
-  let newPage=currentPage+delta;
-  if(newPage<1||newPage>totalPages) return;
-  loadPage(newPage);
-}
+function changePage(delta){ let np=currentPage+delta; if(np<1||np>totalPages) return; loadPage(np); }
 
 async function showStudentDetail(id){
   document.getElementById('modalOverlay').classList.add('show');
   document.getElementById('modalBody').innerHTML='<div style="text-align:center;padding:30px;color:#999;">Loading student details...</div>';
-
   try{
     const r=await authFetch('/api/student/'+id);
     const s=await r.json();
-
     let html='';
-
     html+='<div class="date-cards">';
     html+='<div class="date-card enq"><div class="dt-label">📩 Date of Enquiry</div><div class="dt-val '+(s.dateOfEnquiry?'':'empty')+'">'+(s.dateOfEnquiry||'N/A')+'</div></div>';
     html+='<div class="date-card reg"><div class="dt-label">📝 Date of Registration</div><div class="dt-val '+(s.dateOfRegistration?'':'empty')+'">'+(s.dateOfRegistration||'N/A')+'</div></div>';
     html+='<div class="date-card adm"><div class="dt-label">🎓 Date of Admission</div><div class="dt-val '+(s.dateOfAdmission?'':'empty')+'">'+(s.dateOfAdmission||'N/A')+'</div></div>';
     html+='</div>';
-
     html+='<div class="modal-section"><h4>👤 Personal Information</h4><div class="modal-grid">';
-    html+=item('Student ID',s.studentId);
-    html+=item('Name',s.name);
-    html+=item('Father Name',s.fatherName);
-    html+=item('Mother Name',s.motherName);
-    html+=item('Gender',s.gender);
-    html+=item('DOB',s.dob);
-    html+=item('Mobile',s.mobile);
-    html+=item('Email',s.email);
-    html+=item('Category',s.category);
-    html+=item('Blood Group',s.bloodGroup);
-    html+=item('Religion',s.religion);
-    html+=item('Nationality',s.nationality);
-    html+=item('Aadhar No',s.aadhar);
+    html+=item('Student ID',s.studentId);html+=item('Name',s.name);html+=item('Father Name',s.fatherName);html+=item('Mother Name',s.motherName);
+    html+=item('Gender',s.gender);html+=item('DOB',s.dob);html+=item('Mobile',s.mobile);html+=item('Email',s.email);
+    html+=item('Category',s.category);html+=item('Blood Group',s.bloodGroup);html+=item('Religion',s.religion);html+=item('Nationality',s.nationality);html+=item('Aadhar No',s.aadhar);
     html+='</div></div>';
-
     html+='<div class="modal-section"><h4>📚 Course Information</h4><div class="modal-grid">';
-    html+=item('Course Type',s.courseType);
-    html+=item('Course Name',s.courseName);
-    html+=item('Status',s.applicationStatus);
-    html+=item('Intake',s.intake);
-    html+=item('Campus',s.campus||s.enquiredCenter||s.admittedCenter);
-    html+=item('Enquired Center',s.enquiredCenter);
-    html+=item('Registered Center',s.registeredCenter);
-    html+=item('Admitted Center',s.admittedCenter);
+    html+=item('Course Type',s.courseType);html+=item('Course Name',s.courseName);html+=item('Status',s.applicationStatus);html+=item('Intake',s.intake);
+    html+=item('Campus',s.campus||s.enquiredCenter||s.admittedCenter);html+=item('Enquired Center',s.enquiredCenter);html+=item('Registered Center',s.registeredCenter);html+=item('Admitted Center',s.admittedCenter);
     html+='</div></div>';
-
     html+='<div class="modal-section"><h4>🏠 Address</h4><div class="modal-grid">';
-    html+=item('Address',s.address);
-    html+=item('District',s.district);
-    html+=item('City',s.city);
-    html+=item('State',s.state);
-    html+=item('Pincode',s.pincode);
+    html+=item('Address',s.address);html+=item('District',s.district);html+=item('City',s.city);html+=item('State',s.state);html+=item('Pincode',s.pincode);
     html+='</div></div>';
-
     html+='<div class="modal-section"><h4>📖 Academic Details</h4><div class="modal-grid">';
-    html+=item('10th Board',s.tenthBoard);
-    html+=item('10th School',s.tenthSchool);
-    html+=item('10th Year',s.tenthYear);
+    html+=item('10th Board',s.tenthBoard);html+=item('10th School',s.tenthSchool);html+=item('10th Year',s.tenthYear);
     html+=item('10th Marks',(s.tenthMarks||'-')+'/'+(s.tenthTotal||'-')+' ('+(s.tenthPercent||'-')+'%)');
-    html+=item('12th Board',s.twelfthBoard);
-    html+=item('12th School',s.twelfthSchool);
-    html+=item('12th Year',s.twelfthYear);
+    html+=item('12th Board',s.twelfthBoard);html+=item('12th School',s.twelfthSchool);html+=item('12th Year',s.twelfthYear);
     html+=item('12th Marks',(s.twelfthMarks||'-')+'/'+(s.twelfthTotal||'-')+' ('+(s.twelfthPercent||'-')+'%)');
-    if(s.gradBoard){
-      html+=item('Grad Board',s.gradBoard);
-      html+=item('Grad College',s.gradSchool);
-      html+=item('Grad Year',s.gradYear);
-      html+=item('Grad Marks',(s.gradMarks||'-')+'/'+(s.gradTotal||'-')+' ('+(s.gradPercent||'-')+'%)');
-    }
+    if(s.gradBoard){ html+=item('Grad Board',s.gradBoard);html+=item('Grad College',s.gradSchool);html+=item('Grad Year',s.gradYear);html+=item('Grad Marks',(s.gradMarks||'-')+'/'+(s.gradTotal||'-')+' ('+(s.gradPercent||'-')+'%)'); }
     html+='</div></div>';
-
     document.getElementById('modalTitle').textContent='📋 '+s.name;
     document.getElementById('modalBody').innerHTML=html;
-  }catch(e){
-    console.error('Student detail error:', e);
-    document.getElementById('modalBody').innerHTML='<div style="color:red;padding:20px;">Error loading student details: '+e.message+'</div>';
-  }
+  }catch(e){ document.getElementById('modalBody').innerHTML='<div style="color:red;padding:20px;">Error: '+e.message+'</div>'; }
 }
 
-function item(label,val){
-  return '<div class="item"><span class="lbl">'+label+':</span><span class="val">'+(val||'-')+'</span></div>';
-}
-
-function closeModal(e){
-  if(e.target===document.getElementById('modalOverlay'))
-    document.getElementById('modalOverlay').classList.remove('show');
-}
+function item(label,val){ return '<div class="item"><span class="lbl">'+label+':</span><span class="val">'+(val||'-')+'</span></div>'; }
+function closeModal(e){ if(e.target===document.getElementById('modalOverlay')) document.getElementById('modalOverlay').classList.remove('show'); }
 
 function statusBadge(s){
   let cls='badge-enquired';
-  if(s==='Admitted') cls='badge-admitted';
-  else if(s==='Registered') cls='badge-registered';
-  else if(s==='Withdrawn') cls='badge-withdrawn';
+  if(s==='Admitted') cls='badge-admitted'; else if(s==='Registered') cls='badge-registered'; else if(s==='Withdrawn') cls='badge-withdrawn';
   return '<span class="badge '+cls+'">'+s+'</span>';
 }
 
 function showTab(tab){
-  currentTab=tab;
-  currentPage=1;
+  currentTab=tab; currentPage=1;
   document.querySelectorAll('.tab-btn').forEach(b=>{b.classList.toggle('active',b.dataset.tab===tab);});
   let cards=document.querySelectorAll('.summary .card');
-  cards[0].classList.toggle('active',tab==='enquiry');
-  cards[1].classList.toggle('active',tab==='registration');
-  cards[2].classList.toggle('active',tab==='admission');
+  cards[0].classList.toggle('active',tab==='enquiry'); cards[1].classList.toggle('active',tab==='registration'); cards[2].classList.toggle('active',tab==='admission');
   document.getElementById('searchInput').value='';
   loadPage(1);
 }
@@ -1178,30 +1110,19 @@ function showTab(tab){
 function renderTable(list){
   let wrap=document.getElementById('tableWrap');
   if(list.length===0){wrap.innerHTML='<div class="no-data">No students found for the selected filters.</div>';return;}
-  let showType=currentTab==='all';
-  let offset=(currentPage-1)*30;
+  let showType=currentTab==='all', offset=(currentPage-1)*30;
   let html='<table><thead><tr>';
-  html+='<th>#</th><th>Student ID</th><th>Name</th><th>Course Type</th><th>Course Name</th>';
-  html+='<th>Status</th><th>Campus/Center</th><th>Gender</th><th>Category</th><th>State</th><th>Mobile</th><th>Email</th>';
+  html+='<th>#</th><th>Student ID</th><th>Name</th><th>Course Type</th><th>Course Name</th><th>Status</th><th>Campus/Center</th><th>Gender</th><th>Category</th><th>State</th><th>Mobile</th><th>Email</th>';
   if(showType) html+='<th>Date Type</th>';
   html+='<th>Date</th></tr></thead><tbody>';
   list.forEach((s,i)=>{
-    html+='<tr>';
-    html+='<td>'+(offset+i+1)+'</td>';
-    html+='<td>'+(s.sid||'-')+'</td>';
+    html+='<tr><td>'+(offset+i+1)+'</td><td>'+(s.sid||'-')+'</td>';
     html+='<td><span class="name-link" onclick="showStudentDetail(\''+s._id+'\')">'+s.name+'</span></td>';
-    html+='<td>'+(s.courseType||'-')+'</td>';
-    html+='<td>'+(s.course||'-')+'</td>';
-    html+='<td>'+statusBadge(s.status||'-')+'</td>';
-    html+='<td>'+(s.campus||'-')+'</td>';
-    html+='<td>'+(s.gender||'-')+'</td>';
-    html+='<td>'+(s.category||'-')+'</td>';
-    html+='<td>'+(s.state||'-')+'</td>';
-    html+='<td>'+(s.mobile||'-')+'</td>';
-    html+='<td>'+(s.email||'-')+'</td>';
+    html+='<td>'+(s.courseType||'-')+'</td><td>'+(s.course||'-')+'</td><td>'+statusBadge(s.status||'-')+'</td>';
+    html+='<td>'+(s.campus||'-')+'</td><td>'+(s.gender||'-')+'</td><td>'+(s.category||'-')+'</td>';
+    html+='<td>'+(s.state||'-')+'</td><td>'+(s.mobile||'-')+'</td><td>'+(s.email||'-')+'</td>';
     if(showType) html+='<td><strong>'+(s.dateType||'-')+'</strong></td>';
-    html+='<td>'+(s.dateStr||'-')+'</td>';
-    html+='</tr>';
+    html+='<td>'+(s.dateStr||'-')+'</td></tr>';
   });
   html+='</tbody></table>';
   wrap.innerHTML=html;
@@ -1210,10 +1131,7 @@ function renderTable(list){
 function filterTable(){
   currentPage=1;
   clearTimeout(searchTimer);
-  searchTimer=setTimeout(()=>{
-    loadPage(1);
-    updateFilteredCounts();
-  },300);
+  searchTimer=setTimeout(()=>{ loadPage(1); updateFilteredCounts(); },300);
 }
 
 function listToSheetData(list,showType){
@@ -1231,26 +1149,18 @@ function listToSheetData(list,showType){
 }
 
 async function downloadCurrentExcel(){
-  const sv=document.getElementById('startDate').value;
-  const ev=document.getElementById('endDate').value;
+  const sv=document.getElementById('startDate').value, ev=document.getElementById('endDate').value;
   if(!sv||!ev){alert('No data to download.');return;}
   showLoading('Exporting data...');
   try{
     const r=await authFetch('/api/students/export?'+getQueryParams(currentTab,1));
     const d=await r.json();
-
     let list=d.students||[];
-    if(currentTab==='all'){
-      list=[...(d.enquiries||[]).map(s=>({...s,dateType:'Enquiry'})),
-            ...(d.registrations||[]).map(s=>({...s,dateType:'Registration'})),
-            ...(d.admissions||[]).map(s=>({...s,dateType:'Admission'}))];
-    }
+    if(currentTab==='all') list=[...(d.enquiries||[]).map(s=>({...s,dateType:'Enquiry'})),...(d.registrations||[]).map(s=>({...s,dateType:'Registration'})),...(d.admissions||[]).map(s=>({...s,dateType:'Admission'}))];
     if(list.length===0){alert('No data to download.');return;}
-    let showType=currentTab==='all';
-    let tabName=currentTab.charAt(0).toUpperCase()+currentTab.slice(1);
+    let showType=currentTab==='all', tabName=currentTab.charAt(0).toUpperCase()+currentTab.slice(1);
     let data=listToSheetData(list,showType);
-    let wb=XLSX.utils.book_new();
-    let ws=XLSX.utils.aoa_to_sheet(data);
+    let wb=XLSX.utils.book_new(), ws=XLSX.utils.aoa_to_sheet(data);
     ws['!cols']=data[0].map((_,ci)=>{let max=10;data.forEach(r=>{let l=String(r[ci]||'').length;if(l>max)max=l;});return{wch:max+2};});
     XLSX.utils.book_append_sheet(wb,ws,tabName);
     XLSX.writeFile(wb,'GEU_'+tabName+'_Report.xlsx');
@@ -1258,21 +1168,17 @@ async function downloadCurrentExcel(){
 }
 
 async function downloadAllExcel(){
-  const sv=document.getElementById('startDate').value;
-  const ev=document.getElementById('endDate').value;
+  const sv=document.getElementById('startDate').value, ev=document.getElementById('endDate').value;
   if(!sv||!ev){alert('No data to download.');return;}
   showLoading('Exporting all data...');
   try{
     const r=await authFetch('/api/students/export?'+getQueryParams('allSheets',1));
     const d=await r.json();
-
     const el=d.enquiries||[], rl=d.registrations||[], al=d.admissions||[];
     if(el.length===0&&rl.length===0&&al.length===0){alert('No data to download.');return;}
-
     let wb=XLSX.utils.book_new();
     function addSheet(list,name,showType){
-      let data=listToSheetData(list,showType);
-      let ws=XLSX.utils.aoa_to_sheet(data);
+      let data=listToSheetData(list,showType), ws=XLSX.utils.aoa_to_sheet(data);
       ws['!cols']=data[0].map((_,ci)=>{let max=10;data.forEach(r=>{let l=String(r[ci]||'').length;if(l>max)max=l;});return{wch:max+2};});
       XLSX.utils.book_append_sheet(wb,ws,name);
     }
@@ -1285,33 +1191,19 @@ async function downloadAllExcel(){
   }catch(e){alert('Export failed: '+e.message);}finally{hideLoading();}
 }
 
-// ─── User Management (Admin) ───
+// ─── User Management ───
 async function uploadUsers(){
   const file=document.getElementById('userCsvUpload').files[0];
   if(!file){alert('Select a CSV file with Email, Password, Name columns.');return;}
   const status=document.getElementById('userUploadStatus');
-  status.textContent='Uploading...';
-  status.style.color='#ff9800';
-
-  const formData=new FormData();
-  formData.append('csvFile',file);
-
+  status.textContent='Uploading...'; status.style.color='#ff9800';
+  const formData=new FormData(); formData.append('csvFile',file);
   try{
     const r=await authFetch('/api/users/upload',{method:'POST',body:formData});
     const d=await r.json();
-    if(d.success){
-      status.textContent='✓ '+d.created+' created, '+d.updated+' updated ('+d.total+' total)';
-      status.style.color='#28a745';
-      document.getElementById('userCsvUpload').value='';
-      loadUserList();
-    }else{
-      status.textContent='✗ '+d.error;
-      status.style.color='#dc3545';
-    }
-  }catch(e){
-    status.textContent='✗ Upload failed';
-    status.style.color='#dc3545';
-  }
+    if(d.success){ status.textContent='✓ '+d.created+' created, '+d.updated+' updated'; status.style.color='#28a745'; document.getElementById('userCsvUpload').value=''; loadUserList(); }
+    else{ status.textContent='✗ '+d.error; status.style.color='#dc3545'; }
+  }catch(e){ status.textContent='✗ Upload failed'; status.style.color='#dc3545'; }
 }
 
 async function loadUserList(){
@@ -1319,436 +1211,427 @@ async function loadUserList(){
     const r=await authFetch('/api/users');
     const users=await r.json();
     const wrap=document.getElementById('userListWrap');
-    if(!users.length){wrap.innerHTML='<p style="color:#999;">No users yet. Upload a CSV with Email, Password, Name columns.</p>';return;}
-
+    if(!users.length){wrap.innerHTML='<p style="color:#999;">No users yet.</p>';return;}
     let html='<table class="user-table"><thead><tr><th>Name</th><th>Email</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead><tbody>';
     users.forEach(u=>{
       const active=u.active!==false;
-      html+='<tr>';
-      html+='<td>'+(u.name||'-')+'</td>';
-      html+='<td>'+u.email+'</td>';
+      html+='<tr><td>'+(u.name||'-')+'</td><td>'+u.email+'</td>';
       html+='<td>'+(active?'<span class="status-active">Active</span>':'<span class="status-inactive">Inactive</span>')+'</td>';
       html+='<td>'+(u.createdAt?new Date(u.createdAt).toLocaleDateString():'')+'</td>';
-      html+='<td style="display:flex;gap:6px;">';
-      html+='<button class="btn-sm '+(active?'btn-success':'btn-ghost')+'" onclick="toggleUser(\''+u._id+'\')">'+(active?'Deactivate':'Activate')+'</button> ';
-      html+='<button class="btn-sm btn-danger" onclick="deleteUser(\''+u._id+'\',\''+u.email+'\')">Delete</button>';
-      html+='</td></tr>';
+      html+='<td style="display:flex;gap:6px;"><button class="btn-sm '+(active?'btn-success':'btn-ghost')+'" onclick="toggleUser(\''+u._id+'\')">'+(active?'Deactivate':'Activate')+'</button><button class="btn-sm btn-danger" onclick="deleteUser(\''+u._id+'\',\''+u.email+'\')">Delete</button></td></tr>';
     });
     html+='</tbody></table>';
     wrap.innerHTML=html;
   }catch(e){}
 }
 
-async function toggleUser(id){
-  try{
-    await authFetch('/api/users/'+id+'/toggle',{method:'PATCH'});
-    loadUserList();
-  }catch(e){alert('Failed to toggle user');}
+async function toggleUser(id){ try{ await authFetch('/api/users/'+id+'/toggle',{method:'PATCH'}); loadUserList(); }catch(e){alert('Failed');} }
+async function deleteUser(id,email){ if(!confirm('Delete user '+email+'?')) return; try{ await authFetch('/api/users/'+id,{method:'DELETE'}); loadUserList(); }catch(e){alert('Failed');} }
+
+// ════════════════════════════════════════════════════
+// ─── SEND REPORT MODAL ──────────────────────────────
+// ════════════════════════════════════════════════════
+
+const yearChipColors = ['2022','2023','2024','2025','2026'];
+const chipColorMap = { 0:'selected-orange', 1:'selected-pink', 2:'selected-purple', 3:'selected-blue', 4:'selected-green' };
+
+function toggleYearChip(el){
+  const selectedChips = document.querySelectorAll('#yearChips .chip.selected-blue, #yearChips .chip.selected-purple, #yearChips .chip.selected-green, #yearChips .chip.selected-orange, #yearChips .chip.selected-pink');
+  const isSelected = el.className.includes('selected-');
+  if(isSelected){
+    if(selectedChips.length<=2){ showReportMsg('Please keep at least 2 years selected.','error'); return; }
+    el.className='chip';
+  } else {
+    if(selectedChips.length>=3){ showReportMsg('You can select at most 3 years.','error'); return; }
+    const idx = yearChipColors.indexOf(el.dataset.year);
+    el.className='chip '+chipColorMap[idx];
+  }
+  clearReportMsg();
 }
 
-async function deleteUser(id,email){
-  if(!confirm('Delete user '+email+'?')) return;
-  try{
-    await authFetch('/api/users/'+id,{method:'DELETE'});
-    loadUserList();
-  }catch(e){alert('Failed to delete user');}
+function toggleCampusChip(el){
+  const isSelected = el.className.includes('selected-');
+  if(isSelected){
+    const sel = document.querySelectorAll('#campusChips .chip[class*="selected-"]');
+    if(sel.length<=1){ showReportMsg('Please keep at least 1 campus selected.','error'); return; }
+    el.className='chip';
+  } else {
+    el.className='chip selected-blue';
+  }
+  clearReportMsg();
 }
 
-// ══════════════════════════════════════════════════════
-// ─── Razorpay Payment Report Automation ───────────────
-// ══════════════════════════════════════════════════════
+function getSelectedYears(){
+  return [...document.querySelectorAll('#yearChips .chip')].filter(c=>c.className.includes('selected-')).map(c=>parseInt(c.dataset.year)).sort((a,b)=>b-a);
+}
 
-let rzpAllRows = [];
+function getSelectedCampuses(){
+  return [...document.querySelectorAll('#campusChips .chip')].filter(c=>c.className.includes('selected-')).map(c=>c.dataset.campus);
+}
 
-function findRzpCol(headers, ...candidates) {
-  const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
-  const hNorm = headers.map(h => ({ orig: h, n: norm(h) }));
-  for (const c of candidates) {
-    const cn = norm(c);
-    const found = hNorm.find(h => h.n === cn);
-    if (found) return found.orig;
+// ─── Tag input helpers ───
+function addTag(type, email){
+  email = email.trim().toLowerCase();
+  if(!email || !email.includes('@')) return;
+  const arr = type==='to' ? toEmails : ccEmails;
+  if(arr.includes(email)) return;
+  arr.push(email);
+  renderTags(type);
+  document.getElementById(type+'TagInput').value='';
+}
+
+function removeTag(type, email){
+  if(type==='to') toEmails = toEmails.filter(e=>e!==email);
+  else ccEmails = ccEmails.filter(e=>e!==email);
+  renderTags(type);
+}
+
+function renderTags(type){
+  const arr = type==='to' ? toEmails : ccEmails;
+  const wrap = document.getElementById(type+'TagWrap');
+  const input = document.getElementById(type+'TagInput');
+  // Remove existing tags (keep input)
+  [...wrap.querySelectorAll('.email-tag')].forEach(t=>t.remove());
+  // Insert tags before input
+  arr.forEach(email=>{
+    const tag = document.createElement('span');
+    tag.className='email-tag';
+    tag.innerHTML = email+' <span class="remove-tag" onclick="removeTag(\''+type+'\',\''+email+'\')">×</span>';
+    wrap.insertBefore(tag, input);
+  });
+}
+
+function handleTagKey(e, type){
+  if(e.key==='Enter' || e.key===',' || e.key===';'){
+    e.preventDefault();
+    addTag(type, e.target.value);
+  } else if(e.key==='Backspace' && !e.target.value){
+    const arr = type==='to' ? toEmails : ccEmails;
+    if(arr.length){ arr.pop(); renderTags(type); }
   }
-  for (const c of candidates) {
-    const cn = norm(c);
-    const found = hNorm.find(h => h.n.includes(cn) || cn.includes(h.n));
-    if (found) return found.orig;
+}
+
+function handleTagInput(e, type){
+  if(e.target.value.endsWith(',')){
+    addTag(type, e.target.value.replace(',',''));
   }
+}
+
+// ─── Open/close modal ───
+async function openReportModal(){
+  document.getElementById('reportModalOverlay').classList.add('show');
+  clearReportMsg();
+  document.getElementById('savedPill').style.display='none';
+  // Load saved settings
+  try{
+    const r=await authFetch('/api/email-settings');
+    const d=await r.json();
+    // Restore emails
+    toEmails = d.toEmails||[];
+    ccEmails = d.ccEmails||[];
+    renderTags('to');
+    renderTags('cc');
+    // Restore year chips
+    if(d.years&&d.years.length){
+      document.querySelectorAll('#yearChips .chip').forEach(c=>{ c.className='chip'; });
+      d.years.forEach(y=>{
+        const chip = document.querySelector('#yearChips .chip[data-year="'+y+'"]');
+        if(chip){ const idx=yearChipColors.indexOf(String(y)); chip.className='chip '+(chipColorMap[idx]||'selected-blue'); }
+      });
+    }
+    // Restore campus chips
+    if(d.campuses&&d.campuses.length){
+      document.querySelectorAll('#campusChips .chip').forEach(c=>{ c.className='chip'; });
+      d.campuses.forEach(campus=>{
+        const chip = document.querySelector('#campusChips .chip[data-campus="'+campus+'"]');
+        if(chip) chip.className='chip selected-blue';
+      });
+    }
+  }catch(e){}
+}
+
+function closeReportModal(e){
+  if(!e || e.target===document.getElementById('reportModalOverlay'))
+    document.getElementById('reportModalOverlay').classList.remove('show');
+}
+
+// ─── Save settings ───
+async function saveReportSettings(){
+  const years = getSelectedYears();
+  const campuses = getSelectedCampuses();
+  // Flush any half-typed emails
+  const toInput=document.getElementById('toTagInput').value.trim();
+  const ccInput=document.getElementById('ccTagInput').value.trim();
+  if(toInput) addTag('to',toInput);
+  if(ccInput) addTag('cc',ccInput);
+
+  try{
+    const r=await authFetch('/api/email-settings',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ toEmails, ccEmails, years, campuses })
+    });
+    const d=await r.json();
+    if(d.success){
+      const pill=document.getElementById('savedPill');
+      pill.style.display='inline-flex';
+      setTimeout(()=>{ pill.style.display='none'; },2500);
+    }
+  }catch(e){ showReportMsg('Failed to save settings: '+e.message,'error'); }
+}
+
+// ─── Send report ───
+async function sendReport(){
+  const years = getSelectedYears();
+  const campuses = getSelectedCampuses();
+  // Flush typed emails
+  const toInput=document.getElementById('toTagInput').value.trim();
+  if(toInput) addTag('to',toInput);
+  if(toEmails.length===0){ showReportMsg('Please add at least one To: email recipient.','error'); return; }
+  if(years.length<2){ showReportMsg('Please select at least 2 years.','error'); return; }
+  if(campuses.length===0){ showReportMsg('Please select at least one campus.','error'); return; }
+
+  const btn=document.getElementById('sendEmailBtn');
+  btn.disabled=true;
+  document.getElementById('sendBtnIcon').textContent='⏳';
+  clearReportMsg();
+
+  // Save first
+  await authFetch('/api/email-settings',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({ toEmails, ccEmails, years, campuses })
+  }).catch(()=>{});
+
+  try{
+    const r=await authFetch('/api/send-report',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ years, campuses })
+    });
+    const d=await r.json();
+    if(d.success){
+      showReportMsg('✓ Report sent successfully to '+d.sentTo.join(', '),'success');
+    }else{
+      showReportMsg('✗ '+d.error,'error');
+    }
+  }catch(e){ showReportMsg('✗ Failed: '+e.message,'error'); }
+  finally{ btn.disabled=false; document.getElementById('sendBtnIcon').textContent='🚀'; }
+}
+
+// ─── Preview ───
+async function refreshPreview(){
+  const years = getSelectedYears();
+  const campuses = getSelectedCampuses();
+  if(years.length===0||campuses.length===0){ showReportMsg('Select at least 1 year and 1 campus before previewing.','error'); return; }
+
+  const btn=document.querySelector('.btn-refresh-preview');
+  btn.textContent='⏳ Loading...'; btn.disabled=true;
+
+  try{
+    const r=await authFetch('/api/report-preview?years='+years.join(',')+'&campuses='+campuses.join(','));
+    const d=await r.json();
+    if(d.html){
+      document.getElementById('previewPlaceholder').style.display='none';
+      const iframe=document.getElementById('previewIframe');
+      iframe.style.display='block';
+      iframe.srcdoc=d.html;
+    }
+  }catch(e){ showReportMsg('Preview failed: '+e.message,'error'); }
+  finally{ btn.textContent='🔄 Refresh Preview'; btn.disabled=false; }
+}
+
+function showReportMsg(msg, type){
+  const el=document.getElementById('reportStatusMsg');
+  el.textContent=msg;
+  el.className='report-status-msg '+(type||'');
+  el.style.display='block';
+  if(type==='success') setTimeout(()=>{ el.style.display='none'; },5000);
+}
+function clearReportMsg(){
+  const el=document.getElementById('reportStatusMsg');
+  el.style.display='none'; el.textContent='';
+}
+
+// ════════════════════════════════════════════════════
+// ─── Razorpay ───────────────────────────────────────
+// ════════════════════════════════════════════════════
+let rzpAllRows=[];
+
+function findRzpCol(headers,...candidates){
+  const norm=s=>s.toLowerCase().replace(/[^a-z0-9]/g,'');
+  const hNorm=headers.map(h=>({orig:h,n:norm(h)}));
+  for(const c of candidates){ const cn=norm(c); const found=hNorm.find(h=>h.n===cn); if(found) return found.orig; }
+  for(const c of candidates){ const cn=norm(c); const found=hNorm.find(h=>h.n.includes(cn)||cn.includes(h.n)); if(found) return found.orig; }
   return null;
 }
 
-function parseRzpWorkbook(workbook) {
-  const sheetName = workbook.SheetNames[0];
-  const ws = workbook.Sheets[sheetName];
-  const data = XLSX.utils.sheet_to_json(ws, { defval: '' });
-  if (!data.length) return { rows: [], colMap: {} };
+function parseRzpWorkbook(workbook){
+  const sheetName=workbook.SheetNames[0];
+  const ws=workbook.Sheets[sheetName];
+  const data=XLSX.utils.sheet_to_json(ws,{defval:''});
+  if(!data.length) return{rows:[],colMap:{}};
+  const headers=Object.keys(data[0]);
+  const colTitle=findRzpCol(headers,'payment page title','payment link title','page title','payment link description','description','title','payment link name','remarks');
+  const colDate=findRzpCol(headers,'payment date','authorized at','created at','paid at','transaction date','date','settlement date','captured at');
+  const colOrder=findRzpCol(headers,'order id','order_id','razorpay order id','merchant order id','reference id');
+  const colPayId=findRzpCol(headers,'payment id','payment_id','razorpay payment id','transaction id','txn id','id');
+  const colName=findRzpCol(headers,'customer name','payer name','name','contact name','buyer name','full name');
+  const colEmail=findRzpCol(headers,'customer email','email id','email','payer email','buyer email');
+  const colPhone=findRzpCol(headers,'customer contact','contact','phone','mobile','phone number','mobile number','customer phone','payer phone');
+  const colEntityId=findRzpCol(headers,'entity_id','entity id','payment entity id');
+  const colSettleUTR=findRzpCol(headers,'settlement_utr','settlement utr','utr','utr number','utr no');
+  const colSettleId=findRzpCol(headers,'settlement_id','settlement id','settled by','settlement batch id','batch id');
+  const colSettledAt=findRzpCol(headers,'settled_at','settled at','settlement date','settlement time');
+  const colAddlUTR=findRzpCol(headers,'additional_utr','additional utr','additional utr number');
+  const colTotalAmt=findRzpCol(headers,'total payment amount','total amount','payment amount','amount','total','net amount','gross amount','transaction amount');
+  const colItemAmt=findRzpCol(headers,'item amount','iteam amount','itan amount','item fee','iten amount','item charges','item payment','item amt','iteam amt','itan amt');
 
-  const headers = Object.keys(data[0]);
-
-  const colTitle  = findRzpCol(headers,
-    'payment page title','payment link title','page title','payment link description','description','title','payment link name','remarks');
-  const colDate   = findRzpCol(headers,
-    'payment date','authorized at','created at','paid at','transaction date','date','settlement date','captured at');
-  const colOrder  = findRzpCol(headers,
-    'order id','order_id','razorpay order id','merchant order id','reference id');
-  const colPayId  = findRzpCol(headers,
-    'payment id','payment_id','razorpay payment id','transaction id','txn id','id');
-  const colName   = findRzpCol(headers,
-    'customer name','payer name','name','contact name','buyer name','full name');
-  const colEmail  = findRzpCol(headers,
-    'customer email','email id','email','payer email','buyer email');
-  const colPhone  = findRzpCol(headers,
-    'customer contact','contact','phone','mobile','phone number','mobile number','customer phone','payer phone');
-  const colEntityId  = findRzpCol(headers,
-    'entity_id','entity id','payment entity id');
-  const colSettleUTR = findRzpCol(headers,
-    'settlement_utr','settlement utr','utr','utr number','utr no');
-  const colSettleId  = findRzpCol(headers,
-    'settlement_id','settlement id','settled by','settlement batch id','batch id');
-  const colSettledAt = findRzpCol(headers,
-    'settled_at','settled at','settlement date','settlement time');
-  const colAddlUTR   = findRzpCol(headers,
-    'additional_utr','additional utr','additional utr number');
-
-  // ── Amount columns ──
-  const colTotalAmt = findRzpCol(headers,
-    'total payment amount','total amount','payment amount','amount','total','net amount','gross amount','transaction amount');
-  // ── Item Amount: covers common misspellings (iteam, item, itan) ──
-  const colItemAmt  = findRzpCol(headers,
-    'item amount','iteam amount','itan amount','item fee','iten amount','item charges','item payment',
-    'item amt','iteam amt','itan amt');
-
-  const colMap = {
-    'Payment Page Title':   colTitle      || '—not found—',
-    'Payment Date':         colDate       || '—not found—',
-    'Order ID':             colOrder      || '—not found—',
-    'Payment ID':           colPayId      || '—not found—',
-    'Name':                 colName       || '—not found—',
-    'Email':                colEmail      || '—not found—',
-    'Phone':                colPhone      || '—not found—',
-    'Total Payment Amount': colTotalAmt   || '—not found—',
-    'Item Amount':          colItemAmt    || '—not found—',
-    'Entity ID (join)':     colEntityId   || '—not found—',
-    'Settlement UTR':       colSettleUTR  || '—not found—',
-    'Settlement ID':        colSettleId   || '—not found—',
-    'Settled At':           colSettledAt  || '—not found—',
-    'Additional UTR':       colAddlUTR    || '—not found—',
+  const colMap={
+    'Payment Page Title':colTitle||'—not found—','Payment Date':colDate||'—not found—',
+    'Order ID':colOrder||'—not found—','Payment ID':colPayId||'—not found—',
+    'Name':colName||'—not found—','Email':colEmail||'—not found—','Phone':colPhone||'—not found—',
+    'Total Payment Amount':colTotalAmt||'—not found—','Item Amount':colItemAmt||'—not found—',
+    'Entity ID (join)':colEntityId||'—not found—','Settlement UTR':colSettleUTR||'—not found—',
+    'Settlement ID':colSettleId||'—not found—','Settled At':colSettledAt||'—not found—','Additional UTR':colAddlUTR||'—not found—'
   };
 
-  const rows = data.map(row => {
-    const rawDate = colDate ? row[colDate] : '';
-    let payDate = '';
-    if (rawDate instanceof Date) {
-      payDate = rawDate.toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
-    } else {
-      payDate = String(rawDate || '');
-    }
-
-    return {
-      'Payment Page Title':   colTitle     ? String(row[colTitle]     || '').trim() : '',
-      'Payment Date':         payDate,
-      'Order ID':             colOrder     ? String(row[colOrder]     || '').trim() : '',
-      'Payment ID':           colPayId     ? String(row[colPayId]     || '').trim() : '',
-      'Name':                 colName      ? String(row[colName]      || '').trim() : '',
-      'Email':                colEmail     ? String(row[colEmail]     || '').trim() : '',
-      'Phone':                colPhone     ? String(row[colPhone]     || '').trim() : '',
-      'Total Payment Amount': colTotalAmt  ? String(row[colTotalAmt]  || '').trim() : '',
-      'Item Amount':          colItemAmt   ? String(row[colItemAmt]   || '').trim() : '',
-      // Settlement fields (internal join key prefixed with _)
-      '_entityId':            colEntityId  ? String(row[colEntityId]  || '').trim() : '',
-      'Settlement UTR':       colSettleUTR ? String(row[colSettleUTR] || '').trim() : '',
-      'Settlement ID':        colSettleId  ? String(row[colSettleId]  || '').trim() : '',
-      'Settled At':           colSettledAt ? (() => {
-                                const v = row[colSettledAt];
-                                return v instanceof Date
-                                  ? v.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})
-                                  : String(v||'').trim();
-                              })() : '',
-      'Additional UTR':       colAddlUTR   ? String(row[colAddlUTR]   || '').trim() : '',
+  const rows=data.map(row=>{
+    const rawDate=colDate?row[colDate]:'';
+    let payDate='';
+    if(rawDate instanceof Date) payDate=rawDate.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+    else payDate=String(rawDate||'');
+    return{
+      'Payment Page Title':colTitle?String(row[colTitle]||'').trim():'',
+      'Payment Date':payDate,
+      'Order ID':colOrder?String(row[colOrder]||'').trim():'',
+      'Payment ID':colPayId?String(row[colPayId]||'').trim():'',
+      'Name':colName?String(row[colName]||'').trim():'',
+      'Email':colEmail?String(row[colEmail]||'').trim():'',
+      'Phone':colPhone?String(row[colPhone]||'').trim():'',
+      'Total Payment Amount':colTotalAmt?String(row[colTotalAmt]||'').trim():'',
+      'Item Amount':colItemAmt?String(row[colItemAmt]||'').trim():'',
+      '_entityId':colEntityId?String(row[colEntityId]||'').trim():'',
+      'Settlement UTR':colSettleUTR?String(row[colSettleUTR]||'').trim():'',
+      'Settlement ID':colSettleId?String(row[colSettleId]||'').trim():'',
+      'Settled At':colSettledAt?(()=>{const v=row[colSettledAt];return v instanceof Date?v.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):String(v||'').trim();})():'',
+      'Additional UTR':colAddlUTR?String(row[colAddlUTR]||'').trim():''
     };
   });
-
-  return { rows, colMap };
+  return{rows,colMap};
 }
 
-function readAsWorkbook(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = e => {
-      try {
-        const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array', cellDates: true });
-        resolve(wb);
-      } catch(err) { reject(err); }
-    };
-    reader.onerror = () => reject(new Error('Could not read file: ' + file.name));
+function readAsWorkbook(file){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=e=>{ try{ const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array',cellDates:true}); resolve(wb); }catch(err){reject(err);} };
+    reader.onerror=()=>reject(new Error('Could not read file: '+file.name));
     reader.readAsArrayBuffer(file);
   });
 }
 
-async function processRazorpayReports() {
-  const file1 = document.getElementById('rzpFile1').files[0];
-  const file2 = document.getElementById('rzpFile2').files[0];
-  const statusEl = document.getElementById('rzpStatus');
-  const infoEl   = document.getElementById('rzpColumnInfo');
-
-  if (!file1 && !file2) {
-    alert('Please select at least one Razorpay report file (XLSX / XLS / CSV).');
-    return;
-  }
-
-  statusEl.textContent = 'Processing...';
-  statusEl.style.color = 'var(--warning-dark)';
-  infoEl.style.display = 'none';
+async function processRazorpayReports(){
+  const file1=document.getElementById('rzpFile1').files[0], file2=document.getElementById('rzpFile2').files[0];
+  const statusEl=document.getElementById('rzpStatus'), infoEl=document.getElementById('rzpColumnInfo');
+  if(!file1&&!file2){alert('Please select at least one Razorpay report file.');return;}
+  statusEl.textContent='Processing...'; statusEl.style.color='var(--warning-dark)';
+  infoEl.style.display='none';
   document.getElementById('rzpDownloadBtn').classList.add('hidden');
   document.getElementById('rzpClearBtn').classList.add('hidden');
   showLoading('Processing Razorpay reports...');
-
-  try {
-    let allRows = [];
-    const colMaps = [];
-    const counts  = [];
-    let rows1 = [], rows2 = [];
-
-    if (file1) {
-      const wb1 = await readAsWorkbook(file1);
-      const { rows, colMap } = parseRzpWorkbook(wb1);
-      rows1 = rows;
-      colMaps.push({ file: file1.name, map: colMap });
-    }
-    if (file2) {
-      const wb2 = await readAsWorkbook(file2);
-      const { rows, colMap } = parseRzpWorkbook(wb2);
-      rows2 = rows;
-      colMaps.push({ file: file2.name, map: colMap });
-    }
-
-    // ── Settlement join ──
-    const settlementMap = {};
-    [...rows1, ...rows2].forEach(r => {
-      const key = r['_entityId'] || r['Payment ID'];
-      if (key && (r['Settlement UTR'] || r['Settlement ID'] || r['Settled At'] || r['Additional UTR'])) {
-        settlementMap[key] = {
-          'Settlement UTR': r['Settlement UTR'],
-          'Settlement ID':  r['Settlement ID'],
-          'Settled At':     r['Settled At'],
-          'Additional UTR': r['Additional UTR'],
-        };
-      }
-    });
-
-    const enrichRow = r => {
-      const settle = settlementMap[r['Payment ID']] || {};
-      return {
-        ...r,
-        'Settlement UTR': r['Settlement UTR'] || settle['Settlement UTR'] || '',
-        'Settlement ID':  r['Settlement ID']  || settle['Settlement ID']  || '',
-        'Settled At':     r['Settled At']     || settle['Settled At']     || '',
-        'Additional UTR': r['Additional UTR'] || settle['Additional UTR'] || '',
-      };
-    };
-
-    const payRows1 = rows1.filter(r => r['Payment ID'] || r['Name']).map(enrichRow);
-    const payRows2 = rows2.filter(r => r['Payment ID'] || r['Name']).map(enrichRow);
-    allRows = [...payRows1, ...payRows2];
-
-    counts.push(...[
-      file1 ? { label: 'Report 1 ('+file1.name+')', count: payRows1.length } : null,
-      file2 ? { label: 'Report 2 ('+file2.name+')', count: payRows2.length } : null,
-    ].filter(Boolean));
-
-    const joinedCount = allRows.filter(r => r['Settlement UTR']).length;
-    if (Object.keys(settlementMap).length > 0) {
-      counts.push({ label: '✓ Settlement rows matched', count: joinedCount });
-    }
-
-    rzpAllRows = allRows;
-
-    // Column detection info box
-    let infoHtml = '<strong>🔍 Column Mapping Detected:</strong><br>';
-    colMaps.forEach(cm => {
-      infoHtml += '<span style="color:var(--accent);font-weight:700;">'+cm.file+'</span> → ';
-      const parts = Object.entries(cm.map).map(([k,v]) =>
-        '<span title="'+k+'">'+(v==='—not found—'
-          ? '<span style="color:var(--danger);">'+k+': N/A</span>'
-          : '<span style="color:var(--success-dark);">'+k+': "'+v+'"</span>')+'</span>'
-      );
-      infoHtml += parts.join(' &bull; ') + '<br>';
-    });
-    infoEl.innerHTML = infoHtml;
-    infoEl.style.display = 'block';
-
-    renderRzpTable(allRows);
-
-    const countSummary = counts.map(c => c.label + ': <strong>'+c.count+'</strong>').join(' &nbsp;|&nbsp; ');
-    statusEl.innerHTML = '✓ Total: <strong>'+allRows.length+'</strong> payments — ' + countSummary;
-    statusEl.style.color = 'var(--success-dark)';
-
-    if (allRows.length > 0) {
-      document.getElementById('rzpDownloadBtn').classList.remove('hidden');
-    }
-    document.getElementById('rzpClearBtn').classList.remove('hidden');
-
-  } catch(e) {
-    statusEl.textContent = '✗ Error: ' + e.message;
-    statusEl.style.color = 'var(--danger)';
-    console.error('Razorpay parse error:', e);
-  } finally {
-    hideLoading();
-  }
-}
-
-// ─── Preview table now includes Total Payment Amount & Item Amount ───
-function renderRzpTable(rows) {
-  const wrap = document.getElementById('rzpTableWrap');
-  if (!rows.length) {
-    wrap.innerHTML = '<div class="no-data">No data rows found in the uploaded file(s).</div>';
-    return;
-  }
-
-  // ★ Added 'Total Payment Amount' and 'Item Amount' to preview columns
-  const cols = [
-    '#',
-    'Payment Page Title',
-    'Payment Date',
-    'Order ID',
-    'Payment ID',
-    'Name',
-    'Email',
-    'Phone',
-    'Total Payment Amount',
-    'Item Amount',
-    'Settlement UTR',
-    'Settlement ID',
-    'Settled At',
-    'Additional UTR'
-  ];
-
-  const preview = rows.slice(0, 200);
-  let html = '<div class="table-wrap" style="max-height:420px;">';
-  html += '<table><thead><tr>' + cols.map(c => '<th>'+c+'</th>').join('') + '</tr></thead><tbody>';
-
-  preview.forEach((row, i) => {
-    const hasSett = row['Settlement UTR'] || row['Settlement ID'] || row['Settled At'] || row['Additional UTR'];
-    html += '<tr>';
-    html += '<td>'+(i+1)+'</td>';
-    html += '<td>'+(row['Payment Page Title']||'-')+'</td>';
-    html += '<td>'+(row['Payment Date']||'-')+'</td>';
-    html += '<td style="font-family:monospace;font-size:11px;">'+(row['Order ID']||'-')+'</td>';
-    html += '<td style="font-family:monospace;font-size:11px;">'+(row['Payment ID']||'-')+'</td>';
-    html += '<td style="font-weight:600;">'+(row['Name']||'-')+'</td>';
-    html += '<td>'+(row['Email']||'-')+'</td>';
-    html += '<td>'+(row['Phone']||'-')+'</td>';
-    // ★ Amount columns
-    html += '<td style="font-weight:600;color:var(--success-dark);">'+(row['Total Payment Amount']||'-')+'</td>';
-    html += '<td style="font-weight:600;color:var(--warning-dark);">'+(row['Item Amount']||'-')+'</td>';
-    // Settlement columns
-    html += '<td style="font-family:monospace;font-size:11px;color:'+(hasSett?'var(--success-dark)':'var(--text-muted)')+';">'+(row['Settlement UTR']||'-')+'</td>';
-    html += '<td style="font-family:monospace;font-size:11px;">'+(row['Settlement ID']||'-')+'</td>';
-    html += '<td>'+(row['Settled At']||'-')+'</td>';
-    html += '<td style="font-family:monospace;font-size:11px;">'+(row['Additional UTR']||'-')+'</td>';
-    html += '</tr>';
-  });
-
-  html += '</tbody></table></div>';
-
-  if (rows.length > 200) {
-    html += '<p style="color:var(--text-muted);font-size:12px;margin-top:8px;padding-left:4px;">⚠ Showing first 200 of <strong>'+rows.length+'</strong> rows. Download Excel to see all.</p>';
-  }
-  wrap.innerHTML = html;
-}
-
-// ─── Excel download — all 13 columns including both amount fields ───
-function downloadRazorpayExcel() {
-  if (!rzpAllRows.length) { alert('No data to download.'); return; }
-
-  // ★ 'Item Amount' key matches exactly what parseRzpWorkbook stores
-  const fieldCols = [
-    'Payment Page Title',
-    'Payment Date',
-    'Order ID',
-    'Payment ID',
-    'Name',
-    'Email',
-    'Phone',
-    'Total Payment Amount',
-    'Item Amount',
-    'Settlement UTR',
-    'Settlement ID',
-    'Settled At',
-    'Additional UTR'
-  ];
-
-  const headerRow = ['S.No', ...fieldCols];
-  const dataRows  = rzpAllRows.map((r, i) => [i+1, ...fieldCols.map(c => r[c] || '')]);
-
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet([headerRow, ...dataRows]);
-
-  // Auto column widths
-  ws['!cols'] = headerRow.map((h, ci) => {
-    let max = h.length;
-    dataRows.forEach(r => { const l = String(r[ci]||'').length; if (l > max) max = l; });
-    return { wch: Math.min(max + 2, 45) };
-  });
-
-  XLSX.utils.book_append_sheet(wb, ws, 'Payments');
-  const fname = 'Razorpay_Payments_' + new Date().toISOString().slice(0,10) + '.xlsx';
-  XLSX.writeFile(wb, fname);
-}
-
-function clearRazorpayReports() {
-  rzpAllRows = [];
-  document.getElementById('rzpFile1').value = '';
-  document.getElementById('rzpFile2').value = '';
-  document.getElementById('rzpTableWrap').innerHTML = '';
-  document.getElementById('rzpColumnInfo').style.display = 'none';
-  document.getElementById('rzpStatus').textContent = '';
-  document.getElementById('rzpDownloadBtn').classList.add('hidden');
-  document.getElementById('rzpClearBtn').classList.add('hidden');
-}
-
-// ─── Meritto Integration (Admin) ───
-async function loadMerittoInfo(){
-  const statusEl = document.getElementById('merittoStatus');
   try{
-    const r = await authFetch('/api/meritto/info');
-    const d = await r.json();
-
-    const baseUrl = window.location.origin;
-    const fullUrl = baseUrl + d.webhookPath;
-    document.getElementById('merittoUrl').textContent    = fullUrl;
-    document.getElementById('merittoSecret').textContent = d.secret;
-    document.getElementById('merittoCount').textContent  = d.totalRecords + ' records from Meritto';
-    document.getElementById('merittoLastSync').textContent =
-      d.lastReceived ? 'Last received: ' + new Date(d.lastReceived).toLocaleString('en-IN') : 'No data received yet';
-
-    statusEl.textContent = d.totalRecords > 0 ? '✓ Active' : 'Waiting for data';
-    statusEl.style.color = d.totalRecords > 0 ? 'var(--success-dark)' : 'var(--text-muted)';
-  }catch(e){
-    statusEl.textContent = '✗ Error loading info';
-    statusEl.style.color = 'var(--danger)';
-  }
+    let allRows=[]; const colMaps=[],counts=[]; let rows1=[],rows2=[];
+    if(file1){const wb1=await readAsWorkbook(file1);const{rows,colMap}=parseRzpWorkbook(wb1);rows1=rows;colMaps.push({file:file1.name,map:colMap});}
+    if(file2){const wb2=await readAsWorkbook(file2);const{rows,colMap}=parseRzpWorkbook(wb2);rows2=rows;colMaps.push({file:file2.name,map:colMap});}
+    const settlementMap={};
+    [...rows1,...rows2].forEach(r=>{const key=r['_entityId']||r['Payment ID'];if(key&&(r['Settlement UTR']||r['Settlement ID']||r['Settled At']||r['Additional UTR'])){settlementMap[key]={'Settlement UTR':r['Settlement UTR'],'Settlement ID':r['Settlement ID'],'Settled At':r['Settled At'],'Additional UTR':r['Additional UTR']};}});
+    const enrichRow=r=>{const settle=settlementMap[r['Payment ID']]||{};return{...r,'Settlement UTR':r['Settlement UTR']||settle['Settlement UTR']||'','Settlement ID':r['Settlement ID']||settle['Settlement ID']||'','Settled At':r['Settled At']||settle['Settled At']||'','Additional UTR':r['Additional UTR']||settle['Additional UTR']||''};};
+    const payRows1=rows1.filter(r=>r['Payment ID']||r['Name']).map(enrichRow);
+    const payRows2=rows2.filter(r=>r['Payment ID']||r['Name']).map(enrichRow);
+    allRows=[...payRows1,...payRows2];
+    counts.push(...[file1?{label:'Report 1 ('+file1.name+')',count:payRows1.length}:null,file2?{label:'Report 2 ('+file2.name+')',count:payRows2.length}:null].filter(Boolean));
+    const joinedCount=allRows.filter(r=>r['Settlement UTR']).length;
+    if(Object.keys(settlementMap).length>0) counts.push({label:'✓ Settlement rows matched',count:joinedCount});
+    rzpAllRows=allRows;
+    let infoHtml='<strong>🔍 Column Mapping Detected:</strong><br>';
+    colMaps.forEach(cm=>{infoHtml+='<span style="color:var(--accent);font-weight:700;">'+cm.file+'</span> → ';const parts=Object.entries(cm.map).map(([k,v])=>'<span title="'+k+'">'+(v==='—not found—'?'<span style="color:var(--danger);">'+k+': N/A</span>':'<span style="color:var(--success-dark);">'+k+': "'+v+'"</span>')+'</span>');infoHtml+=parts.join(' &bull; ')+'<br>';});
+    infoEl.innerHTML=infoHtml; infoEl.style.display='block';
+    renderRzpTable(allRows);
+    const countSummary=counts.map(c=>c.label+': <strong>'+c.count+'</strong>').join(' &nbsp;|&nbsp; ');
+    statusEl.innerHTML='✓ Total: <strong>'+allRows.length+'</strong> payments — '+countSummary; statusEl.style.color='var(--success-dark)';
+    if(allRows.length>0) document.getElementById('rzpDownloadBtn').classList.remove('hidden');
+    document.getElementById('rzpClearBtn').classList.remove('hidden');
+  }catch(e){statusEl.textContent='✗ Error: '+e.message;statusEl.style.color='var(--danger)';console.error(e);}
+  finally{hideLoading();}
 }
 
-function copyMerittoUrl(){
-  const v = document.getElementById('merittoUrl').textContent;
-  navigator.clipboard.writeText(v).then(()=>alert('Webhook URL copied!'));
-}
-function copyMerittoSecret(){
-  const v = document.getElementById('merittoSecret').textContent;
-  navigator.clipboard.writeText(v).then(()=>alert('Secret token copied!'));
+function renderRzpTable(rows){
+  const wrap=document.getElementById('rzpTableWrap');
+  if(!rows.length){wrap.innerHTML='<div class="no-data">No data rows found.</div>';return;}
+  const cols=['#','Payment Page Title','Payment Date','Order ID','Payment ID','Name','Email','Phone','Total Payment Amount','Item Amount','Settlement UTR','Settlement ID','Settled At','Additional UTR'];
+  const preview=rows.slice(0,200);
+  let html='<div class="table-wrap" style="max-height:420px;"><table><thead><tr>'+cols.map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>';
+  preview.forEach((row,i)=>{
+    const hasSett=row['Settlement UTR']||row['Settlement ID']||row['Settled At']||row['Additional UTR'];
+    html+='<tr><td>'+(i+1)+'</td><td>'+(row['Payment Page Title']||'-')+'</td><td>'+(row['Payment Date']||'-')+'</td>';
+    html+='<td style="font-family:monospace;font-size:11px;">'+(row['Order ID']||'-')+'</td><td style="font-family:monospace;font-size:11px;">'+(row['Payment ID']||'-')+'</td>';
+    html+='<td style="font-weight:600;">'+(row['Name']||'-')+'</td><td>'+(row['Email']||'-')+'</td><td>'+(row['Phone']||'-')+'</td>';
+    html+='<td style="font-weight:600;color:var(--success-dark);">'+(row['Total Payment Amount']||'-')+'</td><td style="font-weight:600;color:var(--warning-dark);">'+(row['Item Amount']||'-')+'</td>';
+    html+='<td style="font-family:monospace;font-size:11px;color:'+(hasSett?'var(--success-dark)':'var(--text-muted)')+';">'+(row['Settlement UTR']||'-')+'</td>';
+    html+='<td style="font-family:monospace;font-size:11px;">'+(row['Settlement ID']||'-')+'</td><td>'+(row['Settled At']||'-')+'</td><td style="font-family:monospace;font-size:11px;">'+(row['Additional UTR']||'-')+'</td></tr>';
+  });
+  html+='</tbody></table></div>';
+  if(rows.length>200) html+='<p style="color:var(--text-muted);font-size:12px;margin-top:8px;padding-left:4px;">⚠ Showing first 200 of <strong>'+rows.length+'</strong> rows.</p>';
+  wrap.innerHTML=html;
 }
 
-// ─── Comparison Feature ───
+function downloadRazorpayExcel(){
+  if(!rzpAllRows.length){alert('No data to download.');return;}
+  const fieldCols=['Payment Page Title','Payment Date','Order ID','Payment ID','Name','Email','Phone','Total Payment Amount','Item Amount','Settlement UTR','Settlement ID','Settled At','Additional UTR'];
+  const headerRow=['S.No',...fieldCols];
+  const dataRows=rzpAllRows.map((r,i)=>[i+1,...fieldCols.map(c=>r[c]||'')]);
+  const wb=XLSX.utils.book_new(), ws=XLSX.utils.aoa_to_sheet([headerRow,...dataRows]);
+  ws['!cols']=headerRow.map((h,ci)=>{let max=h.length;dataRows.forEach(r=>{const l=String(r[ci]||'').length;if(l>max)max=l;});return{wch:Math.min(max+2,45)};});
+  XLSX.utils.book_append_sheet(wb,ws,'Payments');
+  XLSX.writeFile(wb,'Razorpay_Payments_'+new Date().toISOString().slice(0,10)+'.xlsx');
+}
+
+function clearRazorpayReports(){
+  rzpAllRows=[];
+  document.getElementById('rzpFile1').value=''; document.getElementById('rzpFile2').value='';
+  document.getElementById('rzpTableWrap').innerHTML=''; document.getElementById('rzpColumnInfo').style.display='none';
+  document.getElementById('rzpStatus').textContent='';
+  document.getElementById('rzpDownloadBtn').classList.add('hidden'); document.getElementById('rzpClearBtn').classList.add('hidden');
+}
+
+// ─── Meritto ───
+async function loadMerittoInfo(){
+  const statusEl=document.getElementById('merittoStatus');
+  try{
+    const r=await authFetch('/api/meritto/info');
+    const d=await r.json();
+    const baseUrl=window.location.origin;
+    document.getElementById('merittoUrl').textContent=baseUrl+d.webhookPath;
+    document.getElementById('merittoSecret').textContent=d.secret;
+    document.getElementById('merittoCount').textContent=d.totalRecords+' records from Meritto';
+    document.getElementById('merittoLastSync').textContent=d.lastReceived?'Last received: '+new Date(d.lastReceived).toLocaleString('en-IN'):'No data received yet';
+    statusEl.textContent=d.totalRecords>0?'✓ Active':'Waiting for data';
+    statusEl.style.color=d.totalRecords>0?'var(--success-dark)':'var(--text-muted)';
+  }catch(e){ statusEl.textContent='✗ Error'; statusEl.style.color='var(--danger)'; }
+}
+
+function copyMerittoUrl(){ navigator.clipboard.writeText(document.getElementById('merittoUrl').textContent).then(()=>alert('Webhook URL copied!')); }
+function copyMerittoSecret(){ navigator.clipboard.writeText(document.getElementById('merittoSecret').textContent).then(()=>alert('Secret token copied!')); }
+
+// ─── Comparison ───
 let compareData=null;
 
 async function populateCompareDropdowns(){
   try{
-    const campusSel=document.getElementById('cmpCampus');
-    const courseSel=document.getElementById('cmpCourse');
-    const dashCampus=document.getElementById('campusFilter');
-    const dashCourse=document.getElementById('courseFilter');
-    if(dashCampus.options.length>1){ campusSel.innerHTML=dashCampus.innerHTML; }
-    if(dashCourse.options.length>1){ courseSel.innerHTML=dashCourse.innerHTML; }
+    const campusSel=document.getElementById('cmpCampus'), courseSel=document.getElementById('cmpCourse');
+    const dashCampus=document.getElementById('campusFilter'), dashCourse=document.getElementById('courseFilter');
+    if(dashCampus.options.length>1) campusSel.innerHTML=dashCampus.innerHTML;
+    if(dashCourse.options.length>1) courseSel.innerHTML=dashCourse.innerHTML;
     if(campusSel.options.length<=1||courseSel.options.length<=1){
       const r=await authFetch('/api/students?startDate=2020-01-01&endDate=2030-12-31');
       const d=await r.json();
@@ -1767,164 +1650,87 @@ async function populateCompareDropdowns(){
 }
 
 function getCmpParams(){
-  const sd=document.getElementById('cmpStartDate').value;
-  const ed=document.getElementById('cmpEndDate').value;
+  const sd=document.getElementById('cmpStartDate').value, ed=document.getElementById('cmpEndDate').value;
   if(!sd||!ed) return null;
   const s=sd.split('-'), e=ed.split('-');
-  return {
-    startMonth:s[1], startDay:s[2],
-    endMonth:e[1], endDay:e[2],
-    year1:document.getElementById('cmpYear1').value,
-    year2:document.getElementById('cmpYear2').value,
-    year3:document.getElementById('cmpYear3').value,
-    campus:document.getElementById('cmpCampus').value,
-    course:document.getElementById('cmpCourse').value
-  };
+  return{ startMonth:s[1], startDay:s[2], endMonth:e[1], endDay:e[2], year1:document.getElementById('cmpYear1').value, year2:document.getElementById('cmpYear2').value, year3:document.getElementById('cmpYear3').value, campus:document.getElementById('cmpCampus').value, course:document.getElementById('cmpCourse').value };
 }
 
-function diffBadge(v1,v2){
-  const diff=v1-v2;
-  if(diff>0) return '<div class="cmp-change up">▲ +'+diff+'</div>';
-  if(diff<0) return '<div class="cmp-change down">▼ '+diff+'</div>';
-  return '<div class="cmp-change same">— Same</div>';
-}
-
-function pctChange(v1,v2){
-  if(v2===0) return v1>0?'+100%':'0%';
-  const pct=((v1-v2)/v2*100).toFixed(1);
-  return (pct>0?'+':'')+pct+'%';
-}
+function pctChange(v1,v2){ if(v2===0) return v1>0?'+100%':'0%'; const pct=((v1-v2)/v2*100).toFixed(1); return (pct>0?'+':'')+pct+'%'; }
 
 async function runComparison(){
   const p=getCmpParams();
   if(!p){alert('Please select both From and To dates.');return;}
   if(p.year1===p.year2||p.year1===p.year3||p.year2===p.year3){alert('Please select different years to compare.');return;}
-
   showLoading('Comparing '+p.year1+' vs '+p.year2+' vs '+p.year3+'...');
-
   try{
-    const params=new URLSearchParams(p).toString();
-    const r=await authFetch('/api/compare?'+params);
+    const r=await authFetch('/api/compare?'+new URLSearchParams(p).toString());
     const d=await r.json();
     compareData=d;
-
     const y1=d.year1, y2=d.year2, y3=d.year3;
-
     document.getElementById('cmpPill1').textContent=y1.year;
     document.getElementById('cmpPill2').textContent=y2.year;
     document.getElementById('cmpPill3').textContent=y3.year;
-
-    const metrics=[
-      {key:'enquiry',      label:'Enquiries',     cls:'enq'},
-      {key:'registration', label:'Registrations', cls:'reg'},
-      {key:'admission',    label:'Admissions',    cls:'adm'},
-      {key:'total',        label:'Total Students',cls:'total'}
-    ];
-
+    const metrics=[{key:'enquiry',label:'Enquiries',cls:'enq'},{key:'registration',label:'Registrations',cls:'reg'},{key:'admission',label:'Admissions',cls:'adm'},{key:'total',label:'Total Students',cls:'total'}];
     let rowsHTML='';
     metrics.forEach(m=>{
-      const v1=y1[m.key], v2=y2[m.key], v3=y3[m.key];
-      const isTotal=m.key==='total';
-      rowsHTML+=
-        '<div class="cmp-row'+(isTotal?' total-row':'')+'">'+
-          '<div class="cmp-cell y1">'+
-            '<div class="cmp-tag">'+y1.year+'</div>'+
-            '<div class="cmp-num '+m.cls+'">'+v1.toLocaleString()+'</div>'+
-            '<div class="cmp-metric-label">'+m.label+'</div>'+
-          '</div>'+
-          '<div class="cmp-cell y2">'+
-            '<div class="cmp-tag">'+y2.year+'</div>'+
-            '<div class="cmp-num '+m.cls+'">'+v2.toLocaleString()+'</div>'+
-          '</div>'+
-          '<div class="cmp-cell y3">'+
-            '<div class="cmp-tag">'+y3.year+'</div>'+
-            '<div class="cmp-num '+m.cls+'">'+v3.toLocaleString()+'</div>'+
-          '</div>'+
-        '</div>';
+      const v1=y1[m.key],v2=y2[m.key],v3=y3[m.key],isTotal=m.key==='total';
+      rowsHTML+='<div class="cmp-row'+(isTotal?' total-row':'')+'"><div class="cmp-cell y1"><div class="cmp-tag">'+y1.year+'</div><div class="cmp-num '+m.cls+'">'+v1.toLocaleString()+'</div><div class="cmp-metric-label">'+m.label+'</div></div><div class="cmp-cell y2"><div class="cmp-tag">'+y2.year+'</div><div class="cmp-num '+m.cls+'">'+v2.toLocaleString()+'</div></div><div class="cmp-cell y3"><div class="cmp-tag">'+y3.year+'</div><div class="cmp-num '+m.cls+'">'+v3.toLocaleString()+'</div></div></div>';
     });
     document.getElementById('cmpMetrics').innerHTML=rowsHTML;
 
     let html='<thead><tr><th style="text-align:left;">Metric</th><th>'+y1.year+'</th><th>'+y2.year+'</th><th>'+y3.year+'</th><th>Y1 vs Y2</th><th>Y1 vs Y3</th><th>Y2 vs Y3</th></tr></thead><tbody>';
-    const rows=[
-      ['Enquiries',y1.enquiry,y2.enquiry,y3.enquiry],
-      ['Registrations',y1.registration,y2.registration,y3.registration],
-      ['Admissions',y1.admission,y2.admission,y3.admission],
-      ['Total',y1.total,y2.total,y3.total]
-    ];
+    const rows=[['Enquiries',y1.enquiry,y2.enquiry,y3.enquiry],['Registrations',y1.registration,y2.registration,y3.registration],['Admissions',y1.admission,y2.admission,y3.admission],['Total',y1.total,y2.total,y3.total]];
     rows.forEach(([label,v1,v2,v3],idx)=>{
-      const diff12=v1-v2, diff13=v1-v3, diff23=v2-v3;
-      const diffClass12=diff12>0?'color:#15803d':diff12<0?'color:#b91c1c':'color:var(--text-muted)';
-      const diffClass13=diff13>0?'color:#15803d':diff13<0?'color:#b91c1c':'color:var(--text-muted)';
-      const diffClass23=diff23>0?'color:#15803d':diff23<0?'color:#b91c1c':'color:var(--text-muted)';
-      const sign12=diff12>0?'+':'', sign13=diff13>0?'+':'', sign23=diff23>0?'+':'';
-      const isTotal=idx===rows.length-1;
-      html+='<tr'+(isTotal?' class="total-summary-row"':'')+'>';
-      html+='<td class="metric-col">'+label+'</td>';
-      html+='<td style="font-weight:700;">'+v1.toLocaleString()+'</td>';
-      html+='<td style="font-weight:700;">'+v2.toLocaleString()+'</td>';
-      html+='<td style="font-weight:700;">'+v3.toLocaleString()+'</td>';
-      html+='<td style="'+diffClass12+';font-weight:700;">'+sign12+diff12+' ('+pctChange(v1,v2)+')</td>';
-      html+='<td style="'+diffClass13+';font-weight:700;">'+sign13+diff13+' ('+pctChange(v1,v3)+')</td>';
-      html+='<td style="'+diffClass23+';font-weight:700;">'+sign23+diff23+' ('+pctChange(v2,v3)+')</td>';
-      html+='</tr>';
+      const diff12=v1-v2,diff13=v1-v3,diff23=v2-v3;
+      const c12=diff12>0?'color:#15803d':diff12<0?'color:#b91c1c':'color:var(--text-muted)';
+      const c13=diff13>0?'color:#15803d':diff13<0?'color:#b91c1c':'color:var(--text-muted)';
+      const c23=diff23>0?'color:#15803d':diff23<0?'color:#b91c1c':'color:var(--text-muted)';
+      const s12=diff12>0?'+':'',s13=diff13>0?'+':'',s23=diff23>0?'+':'';
+      html+='<tr'+(idx===rows.length-1?' class="total-summary-row"':'')+'>';
+      html+='<td class="metric-col">'+label+'</td><td style="font-weight:700;">'+v1.toLocaleString()+'</td><td style="font-weight:700;">'+v2.toLocaleString()+'</td><td style="font-weight:700;">'+v3.toLocaleString()+'</td>';
+      html+='<td style="'+c12+';font-weight:700;">'+s12+diff12+' ('+pctChange(v1,v2)+')</td>';
+      html+='<td style="'+c13+';font-weight:700;">'+s13+diff13+' ('+pctChange(v1,v3)+')</td>';
+      html+='<td style="'+c23+';font-weight:700;">'+s23+diff23+' ('+pctChange(v2,v3)+')</td></tr>';
     });
     html+='</tbody>';
     document.getElementById('cmpTable').innerHTML=html;
     document.getElementById('compareResults').style.display='block';
-  }catch(e){
-    alert('Comparison failed: '+e.message);
-  }finally{hideLoading();}
+  }catch(e){ alert('Comparison failed: '+e.message); }
+  finally{ hideLoading(); }
 }
 
 async function downloadComparisonExcel(){
   const p=getCmpParams();
   if(!p||!compareData){alert('Run a comparison first.');return;}
-
   showLoading('Exporting comparison data...');
-
   try{
-    const params=new URLSearchParams(p).toString();
-    const r=await authFetch('/api/compare/export?'+params);
+    const r=await authFetch('/api/compare/export?'+new URLSearchParams(p).toString());
     const d=await r.json();
-
     const wb=XLSX.utils.book_new();
-
     const summaryRows=[
       ['Metric',String(d.year1.year),String(d.year2.year),String(d.year3.year),'Y1 vs Y2','Y1 vs Y3','Y2 vs Y3'],
       ['Enquiries',d.year1.enquiries.length,d.year2.enquiries.length,d.year3.enquiries.length,d.year1.enquiries.length-d.year2.enquiries.length,d.year1.enquiries.length-d.year3.enquiries.length,d.year2.enquiries.length-d.year3.enquiries.length],
       ['Registrations',d.year1.registrations.length,d.year2.registrations.length,d.year3.registrations.length,d.year1.registrations.length-d.year2.registrations.length,d.year1.registrations.length-d.year3.registrations.length,d.year2.registrations.length-d.year3.registrations.length],
-      ['Admissions',d.year1.admissions.length,d.year2.admissions.length,d.year3.admissions.length,d.year1.admissions.length-d.year2.admissions.length,d.year1.admissions.length-d.year3.admissions.length,d.year2.admissions.length-d.year3.admissions.length],
-      ['Total',d.year1.enquiries.length+d.year1.registrations.length+d.year1.admissions.length,d.year2.enquiries.length+d.year2.registrations.length+d.year2.admissions.length,d.year3.enquiries.length+d.year3.registrations.length+d.year3.admissions.length]
+      ['Admissions',d.year1.admissions.length,d.year2.admissions.length,d.year3.admissions.length,d.year1.admissions.length-d.year2.admissions.length,d.year1.admissions.length-d.year3.admissions.length,d.year2.admissions.length-d.year3.admissions.length]
     ];
-    summaryRows[4].push(summaryRows[4][1]-summaryRows[4][2]);
-    summaryRows[4].push(summaryRows[4][1]-summaryRows[4][3]);
-    summaryRows[4].push(summaryRows[4][2]-summaryRows[4][3]);
-    const sws=XLSX.utils.aoa_to_sheet(summaryRows);
-    sws['!cols']=[{wch:16},{wch:10},{wch:10},{wch:10},{wch:12},{wch:12},{wch:12}];
+    const totRow=['Total',summaryRows[1][1]+summaryRows[2][1]+summaryRows[3][1],summaryRows[1][2]+summaryRows[2][2]+summaryRows[3][2],summaryRows[1][3]+summaryRows[2][3]+summaryRows[3][3]];
+    totRow.push(totRow[1]-totRow[2],totRow[1]-totRow[3],totRow[2]-totRow[3]); summaryRows.push(totRow);
+    const sws=XLSX.utils.aoa_to_sheet(summaryRows); sws['!cols']=[{wch:16},{wch:10},{wch:10},{wch:10},{wch:12},{wch:12},{wch:12}];
     XLSX.utils.book_append_sheet(wb,sws,'Summary');
-
     function addDetailSheets(yearData,yearLabel){
-      const types=[['enquiries','Enquiries'],['registrations','Registrations'],['admissions','Admissions']];
-      types.forEach(([key,label])=>{
-        const list=yearData[key]||[];
-        if(list.length===0) return;
-        const data=listToSheetData(list,false);
-        const ws=XLSX.utils.aoa_to_sheet(data);
+      [['enquiries','Enquiries'],['registrations','Registrations'],['admissions','Admissions']].forEach(([key,label])=>{
+        const list=yearData[key]||[]; if(!list.length) return;
+        const data=listToSheetData(list,false), ws=XLSX.utils.aoa_to_sheet(data);
         ws['!cols']=data[0].map((_,ci)=>{let max=10;data.forEach(r=>{let l=String(r[ci]||'').length;if(l>max)max=l;});return{wch:max+2};});
-        const sheetName=yearLabel+' '+label;
-        XLSX.utils.book_append_sheet(wb,ws,sheetName.substring(0,31));
+        XLSX.utils.book_append_sheet(wb,ws,(yearLabel+' '+label).substring(0,31));
       });
     }
-    addDetailSheets(d.year1,String(d.year1.year));
-    addDetailSheets(d.year2,String(d.year2.year));
-    addDetailSheets(d.year3,String(d.year3.year));
-
+    addDetailSheets(d.year1,String(d.year1.year)); addDetailSheets(d.year2,String(d.year2.year)); addDetailSheets(d.year3,String(d.year3.year));
     XLSX.writeFile(wb,'GEU_Comparison_'+d.year1.year+'_'+d.year2.year+'_'+d.year3.year+'.xlsx');
-  }catch(e){
-    alert('Export failed: '+e.message);
-  }finally{hideLoading();}
+  }catch(e){ alert('Export failed: '+e.message); }
+  finally{ hideLoading(); }
 }
 </script>
-
 </body>
 </html>
