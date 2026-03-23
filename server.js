@@ -351,8 +351,8 @@ function buildEmailHTML(years, campuses, results) {
   </p>
 
   <!-- Header Banner -->
-  <div style="background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);border-radius:12px;padding:20px 24px;margin-bottom:16px;">
-    <div style="font-size:20px;font-weight:800;color:white;letter-spacing:-0.5px;">📊 GEU Admissions Report</div>
+  <div style=";border-radius:12px;padding:20px 24px;margin-bottom:16px;">
+    <div style="font-size:20px;font-weight:800;color:black;letter-spacing:-0.5px;"> GRAPHIC Era Admissions Report</div>
     <div style="font-size:12px;color:#94a3b8;margin-top:4px;">Period: 1 Jan → ${dateStr} &nbsp;·&nbsp; Years: ${years.join(' vs ')}</div>
   </div>
 
@@ -371,10 +371,7 @@ function buildEmailHTML(years, campuses, results) {
 
   ${yoyHTML}
 
-  <!-- Footer -->
-  <div style="text-align:center;padding:14px;color:#94a3b8;font-size:11px;margin-top:12px;">
-    Generated automatically by GEU Admission Dashboard · ${new Date().toLocaleString('en-IN')}
-  </div>
+
 
 </div>
 </body>
