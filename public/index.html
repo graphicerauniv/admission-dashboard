@@ -126,6 +126,7 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg)
 .email-tag .remove-tag:hover{color:#ef4444;}
 .tag-input-field{border:none;background:transparent;outline:none;font-size:12px;color:#e2e8f0;font-family:inherit;flex:1;min-width:120px;padding:2px 4px;}
 .tag-input-field::placeholder{color:#475569;}
+.help-text{margin-top:6px;font-size:11px;color:#64748b;font-weight:600;line-height:1.35;}
 
 /* Action buttons in report modal */
 .report-action-row{display:flex;gap:8px;align-items:center;}
@@ -623,6 +624,8 @@ tbody tr{transition:background .1s;}
       <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--border);">
         <div id="merittoCount" style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:var(--purple-light);border:1px solid #c4b5fd;border-radius:20px;font-size:14px;font-weight:700;color:var(--purple-dark);">— records from Meritto</div>
         <div id="merittoLastSync" style="font-size:12px;color:var(--text-muted);font-weight:500;"></div>
+        <button class="btn-sm btn-outline" onclick="downloadMerittoExcel('regular')">⬇ Download Regular</button>
+        <button class="btn-sm btn-outline" onclick="downloadMerittoExcel('online')">⬇ Download Online</button>
         <button class="btn-sm btn-ghost" onclick="loadMerittoInfo()">🔄 Refresh</button>
       </div>
     </div>
@@ -757,6 +760,7 @@ tbody tr{transition:background .1s;}
         <div class="tag-input-wrap" id="toTagWrap" onclick="document.getElementById('toTagInput').focus()">
           <input class="tag-input-field" id="toTagInput" placeholder="Type email, press Enter…" onkeydown="handleTagKey(event,'to')" oninput="handleTagInput(event,'to')">
         </div>
+        <div class="help-text">Tip: Type an email and press <b>Enter</b> to add. You can also paste multiple emails separated by comma (,), semicolon (;), or space. Click <b>×</b> on a chip to remove.</div>
       </div>
 
       <!-- CC: emails -->
@@ -765,6 +769,7 @@ tbody tr{transition:background .1s;}
         <div class="tag-input-wrap" id="ccTagWrap" onclick="document.getElementById('ccTagInput').focus()">
           <input class="tag-input-field" id="ccTagInput" placeholder="Type email, press Enter…" onkeydown="handleTagKey(event,'cc')" oninput="handleTagInput(event,'cc')">
         </div>
+        <div class="help-text">Same as To: press <b>Enter</b> after each email, or paste many at once (comma/semicolon/space separated).</div>
       </div>
 
       <!-- Action buttons -->
@@ -1293,14 +1298,39 @@ function getSelectedCampuses(){
 }
 
 // ─── Tag input helpers ───
-function addTag(type, email){
-  email = email.trim().toLowerCase();
-  if(!email || !email.includes('@')) return;
+function extractEmails(raw){
+  if(!raw) return [];
+  const tokens = raw
+    .toString()
+    .replace(/\s+/g,' ')
+    .split(/[\s,;]+/)
+    .map(s=>s.trim().toLowerCase())
+    .filter(Boolean);
+  // lightweight validation: keep tokens that look like emails
+  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return tokens.filter(t=>emailRe.test(t));
+}
+
+function addEmails(type, emails, { render=true } = {}){
+  if(!emails || !emails.length) return;
   const arr = type==='to' ? toEmails : ccEmails;
-  if(arr.includes(email)) return;
-  arr.push(email);
-  renderTags(type);
-  document.getElementById(type+'TagInput').value='';
+  let changed=false;
+  emails.forEach(email=>{
+    if(!arr.includes(email)){
+      arr.push(email);
+      changed=true;
+    }
+  });
+  if(render && changed) renderTags(type);
+}
+
+function addEmailTokens(type, raw, { clearInput=true } = {}){
+  const emails = extractEmails(raw);
+  addEmails(type, emails);
+  if(clearInput){
+    const input = document.getElementById(type+'TagInput');
+    if(input) input.value='';
+  }
 }
 
 function removeTag(type, email){
@@ -1327,7 +1357,7 @@ function renderTags(type){
 function handleTagKey(e, type){
   if(e.key==='Enter' || e.key===',' || e.key===';'){
     e.preventDefault();
-    addTag(type, e.target.value);
+    addEmailTokens(type, e.target.value, { clearInput:true });
   } else if(e.key==='Backspace' && !e.target.value){
     const arr = type==='to' ? toEmails : ccEmails;
     if(arr.length){ arr.pop(); renderTags(type); }
@@ -1335,8 +1365,14 @@ function handleTagKey(e, type){
 }
 
 function handleTagInput(e, type){
-  if(e.target.value.endsWith(',')){
-    addTag(type, e.target.value.replace(',',''));
+  const v = (e.target.value || '');
+  // If user pasted multiple separated by comma/semicolon, commit all but keep last token as in-progress
+  if(v.includes(',') || v.includes(';')){
+    const parts = v.split(/[,;]+/);
+    const completed = parts.slice(0,-1).join(' ');
+    const last = parts[parts.length-1];
+    if(completed.trim()) addEmailTokens(type, completed, { clearInput:false });
+    e.target.value = (last || '').trimStart();
   }
 }
 
@@ -1393,8 +1429,8 @@ async function saveReportSettings(){
   // Flush any half-typed emails
   const toInput=document.getElementById('toTagInput').value.trim();
   const ccInput=document.getElementById('ccTagInput').value.trim();
-  if(toInput) addTag('to',toInput);
-  if(ccInput) addTag('cc',ccInput);
+  if(toInput) addEmailTokens('to', toInput, { clearInput:true });
+  if(ccInput) addEmailTokens('cc', ccInput, { clearInput:true });
 
   try{
     const r=await authFetch('/api/email-settings',{
@@ -1419,7 +1455,7 @@ async function sendReport(){
   const mode = (modeEl && modeEl.value==='online') ? 'online' : 'regular';
   // Flush typed emails
   const toInput=document.getElementById('toTagInput').value.trim();
-  if(toInput) addTag('to',toInput);
+  if(toInput) addEmailTokens('to', toInput, { clearInput:true });
   if(toEmails.length===0){ showReportMsg('Please add at least one To: email recipient.','error'); return; }
   if(years.length<2){ showReportMsg('Please select at least 2 years.','error'); return; }
   if(campuses.length===0){ showReportMsg('Please select at least one campus.','error'); return; }
@@ -1653,6 +1689,44 @@ async function loadMerittoInfo(){
     statusEl.textContent=d.totalRecords>0?'✓ Active':'Waiting for data';
     statusEl.style.color=d.totalRecords>0?'var(--success-dark)':'var(--text-muted)';
   }catch(e){ statusEl.textContent='✗ Error'; statusEl.style.color='var(--danger)'; }
+}
+
+async function downloadMerittoExcel(mode){
+  const m = (mode==='online') ? 'online' : 'regular';
+  showLoading('Exporting Meritto '+m+' data...');
+  try{
+    const r=await authFetch('/api/meritto/export?mode='+encodeURIComponent(m));
+    const d=await r.json();
+    if(!d || !Array.isArray(d.students)) throw new Error(d && d.error ? d.error : 'Export failed');
+    const list=d.students;
+    if(!list.length){ alert('No Meritto records found for '+m+'.'); return; }
+
+    const headers=['S.No','Student ID','Name','Course Type','Course Name','Status','Campus/Center','Mobile','Email','Enquiry Date','Registration Date','Admission Date','Batch'];
+    const rows=list.map((s,i)=>[
+      i+1,
+      s.studentId||'',
+      s.name||'',
+      s.courseType||'',
+      s.courseName||'',
+      s.status||'',
+      s.campus||'',
+      s.mobile||'',
+      s.email||'',
+      s.dateOfEnquiry||'',
+      s.dateOfRegistration||'',
+      s.dateOfAdmission||'',
+      s.uploadBatch||''
+    ]);
+
+    const wb=XLSX.utils.book_new();
+    const ws=XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    ws['!cols']=headers.map((h,ci)=>{let max=h.length;rows.forEach(r=>{const l=String(r[ci]||'').length;if(l>max)max=l;});return{wch:Math.min(max+2,50)};});
+    XLSX.utils.book_append_sheet(wb, ws, 'Meritto_'+m);
+    const dateStr=new Date().toISOString().slice(0,10);
+    XLSX.writeFile(wb, 'Meritto_'+m+'_Data_'+dateStr+'.xlsx');
+  }catch(e){
+    alert('Meritto export failed: '+e.message);
+  }finally{ hideLoading(); }
 }
 
 function copyMerittoUrl(){ navigator.clipboard.writeText(document.getElementById('merittoUrl').textContent).then(()=>alert('Webhook URL copied!')); }

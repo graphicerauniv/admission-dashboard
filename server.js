@@ -995,6 +995,32 @@ app.get('/api/meritto/info', auth, adminOnly, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+app.get('/api/meritto/export', auth, adminOnly, async (req, res) => {
+  try {
+    const { mode } = req.query;
+    const modeQ = modeCourseQuery(mode);
+    const docs = await Student.find({ uploadBatch: /^meritto_/, ...modeQ }, listProjection).lean();
+    const rows = docs.map(s => ({
+      _id: s._id,
+      studentId: s.studentId || '',
+      name: s.name || '',
+      courseType: s.courseType || '',
+      courseName: s.courseName || '',
+      status: s.applicationStatus || '',
+      campus: displayCampus(s.campus || s.enquiredCenter || s.registeredCenter || s.admittedCenter || ''),
+      mobile: s.mobile || '',
+      email: s.email || '',
+      dateOfEnquiry: s.dateOfEnquiry || '',
+      dateOfRegistration: s.dateOfRegistration || '',
+      dateOfAdmission: s.dateOfAdmission || '',
+      uploadBatch: s.uploadBatch || ''
+    }));
+    res.json({ total: rows.length, students: rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'public', 'index.html')); });
 
 const PORT = process.env.PORT || 3000;
