@@ -379,7 +379,7 @@ function buildEmailHTML(years, campuses, results) {
   <p style="font-size:14px;color:#1e293b;margin-bottom:16px;font-weight:500;">
     Hon'ble Sir,<br><br>
     Kindly find the admission data for both <strong>GEU</strong> and <strong>GEHU</strong>
-    at <strong>${timeStr}</strong> till <strong>${dateStr}</strong>.
+    at <strong>5:30</strong> till <strong>${dateStr}</strong>.
   </p>
 
   <!-- Header Banner -->
