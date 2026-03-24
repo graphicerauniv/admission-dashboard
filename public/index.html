@@ -481,6 +481,7 @@ tbody tr{transition:background .1s;}
           <button class="tab-btn" data-tab="all" onclick="showTab('all')">All Combined</button>
         </div>
         <div class="filter-bar no-print">
+          <div class="filter-group"><label>Mode</label><select id="modeFilter" onchange="onModeFilterChange()"><option value="regular" selected>Regular</option><option value="online">Online</option></select></div>
           <div class="filter-group"><label>Campus</label><select id="campusFilter" onchange="filterTable()"><option value="">All Campuses</option></select></div>
           <div class="filter-group"><label>Course</label><select id="courseFilter" onchange="filterTable()"><option value="">All Courses</option></select></div>
           <div class="filter-group"><label>Year</label><select id="yearFilter" onchange="filterTable()"></select></div>
@@ -662,7 +663,8 @@ tbody tr{transition:background .1s;}
         <div class="ctrl-group"><label>To Date</label><input type="date" id="cmpEndDate"></div>
         <div class="ctrl-group"><label>Year 1</label><select id="cmpYear1"><option value="2024">2024</option><option value="2025" selected>2025</option><option value="2026">2026</option></select></div>
         <div class="ctrl-group"><label>Year 2</label><select id="cmpYear2"><option value="2023">2023</option><option value="2024" selected>2024</option><option value="2025">2025</option><option value="2026">2026</option></select></div>
-        <div class="ctrl-group"><label>Year 3</label><select id="cmpYear3"><option value="2022">2022</option><option value="2023" selected>2023</option><option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option></select></div>
+        <div class="ctrl-group"><label>Year 3</label><select id="cmpYear3"><option value="2022">2022</option><option value="2026" selected>2026</option><option value="2024">2024</option><option value="2025">2025</option><option value="2023">2023</option></select></div>
+        <div class="ctrl-group"><label>Mode</label><select id="cmpMode" onchange="populateCompareDropdowns()"><option value="regular" selected>Regular</option><option value="online">Online</option></select></div>
         <div class="ctrl-group"><label>Campus</label><select id="cmpCampus"><option value="">All Campuses</option></select></div>
         <div class="ctrl-group"><label>Course</label><select id="cmpCourse"><option value="">All Courses</option></select></div>
         <button onclick="runComparison()" style="align-self:end;">Compare</button>
@@ -738,6 +740,15 @@ tbody tr{transition:background .1s;}
           <span class="chip" data-campus="GEHUHLD" onclick="toggleCampusChip(this)">GEHU-Haldwani</span>
           <span class="chip" data-campus="GEHUBTL" onclick="toggleCampusChip(this)">GEHU-Bhimtal</span>
         </div>
+      </div>
+
+      <!-- Mode Selection -->
+      <div>
+        <div class="chip-group-label">Select Mode</div>
+        <select id="reportMode" onchange="clearReportMsg()" style="width:100%;padding:9px 12px;border:1.5px solid #334155;border-radius:8px;background:#0f172a;color:#e2e8f0;font-size:12px;font-weight:600;">
+          <option value="regular" selected>Regular</option>
+          <option value="online">Online</option>
+        </select>
       </div>
 
       <!-- To: emails -->
@@ -951,9 +962,21 @@ async function deleteBatch(batchId, count){
   finally{ hideLoading(); }
 }
 
+function getSelectedMode(){
+  const el=document.getElementById('modeFilter');
+  return (el && el.value==='online') ? 'online' : 'regular';
+}
+
+function onModeFilterChange(){
+  // Reload summary + filters + first page under the selected mode
+  const sv=document.getElementById('startDate').value, ev=document.getElementById('endDate').value;
+  if(!sv||!ev) return;
+  loadFromDB();
+}
+
 function getQueryParams(tab, page){
   const sv=document.getElementById('startDate').value, ev=document.getElementById('endDate').value;
-  let params='startDate='+sv+'&endDate='+ev+'&tab='+(tab||currentTab)+'&page='+(page||1)+'&limit=30';
+  let params='startDate='+sv+'&endDate='+ev+'&mode='+encodeURIComponent(getSelectedMode())+'&tab='+(tab||currentTab)+'&page='+(page||1)+'&limit=30';
   const campus=document.getElementById('campusFilter').value, course=document.getElementById('courseFilter').value, year=document.getElementById('yearFilter').value, search=document.getElementById('searchInput').value.trim();
   if(campus) params+='&campus='+encodeURIComponent(campus);
   if(course) params+='&course='+encodeURIComponent(course);
@@ -967,7 +990,7 @@ async function loadFromDB(){
   if(!sv||!ev){alert('Please select both Start Date and End Date.');return;}
   showLoading('Fetching summary...');
   try{
-    const r=await authFetch('/api/students?startDate='+sv+'&endDate='+ev);
+    const r=await authFetch('/api/students?startDate='+sv+'&endDate='+ev+'&mode='+encodeURIComponent(getSelectedMode()));
     const d=await r.json();
     document.getElementById('enquiryCount').innerText=d.enquiryCount||0;
     document.getElementById('registrationCount').innerText=d.registrationCount||0;
@@ -1021,7 +1044,7 @@ async function updateFilteredCounts(){
   if(!sv||!ev) return;
   const campus=document.getElementById('campusFilter').value, course=document.getElementById('courseFilter').value, year=document.getElementById('yearFilter').value, search=document.getElementById('searchInput').value.trim();
   if(!campus&&!course&&!year&&!search){
-    const r=await authFetch('/api/students?startDate='+sv+'&endDate='+ev);
+    const r=await authFetch('/api/students?startDate='+sv+'&endDate='+ev+'&mode='+encodeURIComponent(getSelectedMode()));
     const d=await r.json();
     document.getElementById('enquiryCount').innerText=d.enquiryCount||0;
     document.getElementById('registrationCount').innerText=d.registrationCount||0;
@@ -1347,6 +1370,12 @@ async function openReportModal(){
         if(chip) chip.className='chip selected-blue';
       });
     }
+
+    // Restore mode
+    const modeEl=document.getElementById('reportMode');
+    if(modeEl){
+      modeEl.value = (d.mode==='online') ? 'online' : 'regular';
+    }
   }catch(e){}
 }
 
@@ -1359,6 +1388,8 @@ function closeReportModal(e){
 async function saveReportSettings(){
   const years = getSelectedYears();
   const campuses = getSelectedCampuses();
+  const modeEl=document.getElementById('reportMode');
+  const mode = (modeEl && modeEl.value==='online') ? 'online' : 'regular';
   // Flush any half-typed emails
   const toInput=document.getElementById('toTagInput').value.trim();
   const ccInput=document.getElementById('ccTagInput').value.trim();
@@ -1369,7 +1400,7 @@ async function saveReportSettings(){
     const r=await authFetch('/api/email-settings',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ toEmails, ccEmails, years, campuses })
+      body:JSON.stringify({ toEmails, ccEmails, years, campuses, mode })
     });
     const d=await r.json();
     if(d.success){
@@ -1384,6 +1415,8 @@ async function saveReportSettings(){
 async function sendReport(){
   const years = getSelectedYears();
   const campuses = getSelectedCampuses();
+  const modeEl=document.getElementById('reportMode');
+  const mode = (modeEl && modeEl.value==='online') ? 'online' : 'regular';
   // Flush typed emails
   const toInput=document.getElementById('toTagInput').value.trim();
   if(toInput) addTag('to',toInput);
@@ -1400,14 +1433,14 @@ async function sendReport(){
   await authFetch('/api/email-settings',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({ toEmails, ccEmails, years, campuses })
+    body:JSON.stringify({ toEmails, ccEmails, years, campuses, mode })
   }).catch(()=>{});
 
   try{
     const r=await authFetch('/api/send-report',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ years, campuses })
+      body:JSON.stringify({ years, campuses, mode })
     });
     const d=await r.json();
     if(d.success){
@@ -1423,13 +1456,15 @@ async function sendReport(){
 async function refreshPreview(){
   const years = getSelectedYears();
   const campuses = getSelectedCampuses();
+  const modeEl=document.getElementById('reportMode');
+  const mode = (modeEl && modeEl.value==='online') ? 'online' : 'regular';
   if(years.length===0||campuses.length===0){ showReportMsg('Select at least 1 year and 1 campus before previewing.','error'); return; }
 
   const btn=document.querySelector('.btn-refresh-preview');
   btn.textContent='⏳ Loading...'; btn.disabled=true;
 
   try{
-    const r=await authFetch('/api/report-preview?years='+years.join(',')+'&campuses='+campuses.join(','));
+    const r=await authFetch('/api/report-preview?years='+years.join(',')+'&campuses='+campuses.join(',')+'&mode='+encodeURIComponent(mode));
     const d=await r.json();
     if(d.html){
       document.getElementById('previewPlaceholder').style.display='none';
@@ -1630,10 +1665,15 @@ async function populateCompareDropdowns(){
   try{
     const campusSel=document.getElementById('cmpCampus'), courseSel=document.getElementById('cmpCourse');
     const dashCampus=document.getElementById('campusFilter'), dashCourse=document.getElementById('courseFilter');
-    if(dashCampus.options.length>1) campusSel.innerHTML=dashCampus.innerHTML;
-    if(dashCourse.options.length>1) courseSel.innerHTML=dashCourse.innerHTML;
+    const modeEl=document.getElementById('cmpMode');
+    const mode=(modeEl && modeEl.value==='online') ? 'online' : 'regular';
+    const dashMode=getSelectedMode();
+    if(dashMode===mode){
+      if(dashCampus.options.length>1) campusSel.innerHTML=dashCampus.innerHTML;
+      if(dashCourse.options.length>1) courseSel.innerHTML=dashCourse.innerHTML;
+    }
     if(campusSel.options.length<=1||courseSel.options.length<=1){
-      const r=await authFetch('/api/students?startDate=2020-01-01&endDate=2030-12-31');
+      const r=await authFetch('/api/students?startDate=2020-01-01&endDate=2030-12-31&mode='+encodeURIComponent(mode));
       const d=await r.json();
       if(campusSel.options.length<=1){
         campusSel.innerHTML='<option value="">All Campuses</option>';
@@ -1653,7 +1693,9 @@ function getCmpParams(){
   const sd=document.getElementById('cmpStartDate').value, ed=document.getElementById('cmpEndDate').value;
   if(!sd||!ed) return null;
   const s=sd.split('-'), e=ed.split('-');
-  return{ startMonth:s[1], startDay:s[2], endMonth:e[1], endDay:e[2], year1:document.getElementById('cmpYear1').value, year2:document.getElementById('cmpYear2').value, year3:document.getElementById('cmpYear3').value, campus:document.getElementById('cmpCampus').value, course:document.getElementById('cmpCourse').value };
+  const modeEl=document.getElementById('cmpMode');
+  const mode=(modeEl && modeEl.value==='online') ? 'online' : 'regular';
+  return{ startMonth:s[1], startDay:s[2], endMonth:e[1], endDay:e[2], year1:document.getElementById('cmpYear1').value, year2:document.getElementById('cmpYear2').value, year3:document.getElementById('cmpYear3').value, campus:document.getElementById('cmpCampus').value, course:document.getElementById('cmpCourse').value, mode };
 }
 
 function pctChange(v1,v2){ if(v2===0) return v1>0?'+100%':'0%'; const pct=((v1-v2)/v2*100).toFixed(1); return (pct>0?'+':'')+pct+'%'; }

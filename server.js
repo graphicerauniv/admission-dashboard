@@ -168,6 +168,7 @@ const emailSettingsSchema = new mongoose.Schema({
   key: { type: String, default: 'report_settings', unique: true },
   toEmails: [{ type: String, trim: true, lowercase: true }],
   ccEmails: [{ type: String, trim: true, lowercase: true }],
+  mode: { type: String, enum: ['regular', 'online'], default: 'regular' },
   campuses: [{ type: String, trim: true }],   // ['GEU', 'GEHU'] etc.
   years: [{ type: Number }],                   // [2026, 2025, 2024]
   updatedAt: { type: Date, default: Date.now }
@@ -196,17 +197,17 @@ function createTransporter() {
 app.get('/api/email-settings', auth, adminOnly, async (req, res) => {
   try {
     const s = await EmailSettings.findOne({ key: 'report_settings' }).lean();
-    res.json(s || { toEmails: [], ccEmails: [], campuses: ['GEU', 'GEHU'], years: [2026, 2025, 2024] });
+    res.json(s || { toEmails: [], ccEmails: [], mode: 'regular', campuses: ['GEU', 'GEHU'], years: [2026, 2025, 2024] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ─── POST /api/email-settings ───
 app.post('/api/email-settings', auth, adminOnly, async (req, res) => {
   try {
-    const { toEmails, ccEmails, campuses, years } = req.body;
+    const { toEmails, ccEmails, campuses, years, mode } = req.body;
     await EmailSettings.findOneAndUpdate(
       { key: 'report_settings' },
-      { toEmails: toEmails || [], ccEmails: ccEmails || [], campuses: campuses || [], years: years || [], updatedAt: new Date() },
+      { toEmails: toEmails || [], ccEmails: ccEmails || [], mode: normalizeMode(mode), campuses: campuses || [], years: years || [], updatedAt: new Date() },
       { upsert: true, new: true }
     );
     res.json({ success: true });
@@ -224,9 +225,10 @@ function campusMatchQuery(campusCode) {
 
 // ─── Helper: build report data ───
 // Returns: { results[year][campusCode] = { reg, adm } }
-async function buildReport(years, campuses) {
+async function buildReport(years, campuses, mode) {
   const today = new Date();
   const results = {};
+  const modeQ = modeCourseQuery(mode);
 
   for (const year of years) {
     results[year] = {};
@@ -235,9 +237,23 @@ async function buildReport(years, campuses) {
 
     for (const campus of campuses) {
       const cq = campusMatchQuery(campus === 'GEHU' ? 'GEHU' : campus);
+
+      const andParts = [];
+      if (cq && Object.keys(cq).length) andParts.push(cq);
+      if (modeQ && Object.keys(modeQ).length) andParts.push(modeQ);
+
+      const regFilter = {
+        registrationDateParsed: { $gte: start, $lte: end },
+        ...(andParts.length ? { $and: andParts } : {})
+      };
+      const admFilter = {
+        admissionDateParsed: { $gte: start, $lte: end },
+        ...(andParts.length ? { $and: andParts } : {})
+      };
+
       const [reg, adm] = await Promise.all([
-        Student.countDocuments({ registrationDateParsed: { $gte: start, $lte: end }, ...cq }),
-        Student.countDocuments({ admissionDateParsed:    { $gte: start, $lte: end }, ...cq })
+        Student.countDocuments(regFilter),
+        Student.countDocuments(admFilter)
       ]);
       results[year][campus] = { reg, adm };
     }
@@ -314,16 +330,16 @@ function buildEmailHTML(years, campuses, results) {
     dataRows += `<tr>${tds}</tr>`;
   });
 
-  // ── Year-over-year summary (2 most recent years) ──
+  // ── Year-over-year summary (newest vs previous, and newest vs oldest) ──
   let yoyHTML = '';
-  if (years.length >= 2) {
-    const y1 = years[0], y2 = years[1];
-    const metrics = [
-      { label: 'Registration', type: 'reg' },
-      { label: 'Admitted', type: 'adm' }
-    ];
-    yoyHTML = `
-    <div style="margin-top:20px;padding:16px 20px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;">
+  const metrics = [
+    { label: 'Registration', type: 'reg' },
+    { label: 'Admitted', type: 'adm' }
+  ];
+
+  function buildYoYBlock(y1, y2) {
+    return `
+    <div style="padding:16px 20px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;width:100%;">
       <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Year-over-Year Change (${y1} vs ${y2})</div>
       ${metrics.map(m => {
         const v1 = yearTotal(y1, m.type);
@@ -335,6 +351,22 @@ function buildEmailHTML(years, campuses, results) {
         return `<div style="font-size:13px;font-weight:600;color:#1e293b;margin-bottom:4px;">${m.label}: <span style="color:${color};font-weight:700;">${sign}${diff} (${sign}${pct}%)</span></div>`;
       }).join('')}
     </div>`;
+  }
+
+  const yoyBlocks = [];
+  if (years.length >= 2) yoyBlocks.push(buildYoYBlock(years[0], years[1]));
+  if (years.length >= 3) yoyBlocks.push(buildYoYBlock(years[0], years[2]));
+
+  if (yoyBlocks.length === 1) {
+    yoyHTML = `<div style="margin-top:20px;">${yoyBlocks[0]}</div>`;
+  } else if (yoyBlocks.length >= 2) {
+    yoyHTML = `
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:20px;border-collapse:separate;">
+      <tr>
+        <td width="50%" valign="top" style="padding-right:6px;">${yoyBlocks[0]}</td>
+        <td width="50%" valign="top" style="padding-left:6px;">${yoyBlocks[1]}</td>
+      </tr>
+    </table>`;
   }
 
   return `<!DOCTYPE html>
@@ -386,12 +418,13 @@ app.get('/api/report-preview', auth, async (req, res) => {
   try {
     const yearsParam  = req.query.years;
     const campusParam = req.query.campuses;
+    const mode = req.query.mode;
     if (!yearsParam || !campusParam) return res.status(400).json({ error: 'years and campuses params required' });
 
     const years   = yearsParam.split(',').map(Number).sort((a, b) => b - a);
     const campuses = campusParam.split(',').map(s => s.trim()).filter(Boolean);
 
-    const results = await buildReport(years, campuses);
+    const results = await buildReport(years, campuses, mode);
     const html    = buildEmailHTML(years, campuses, results);
     res.json({ html });
   } catch (err) {
@@ -402,7 +435,7 @@ app.get('/api/report-preview', auth, async (req, res) => {
 // ─── POST /api/send-report ───
 app.post('/api/send-report', auth, adminOnly, async (req, res) => {
   try {
-    const { years, campuses } = req.body;
+    const { years, campuses, mode } = req.body;
     if (!years || !years.length)   return res.status(400).json({ error: 'No years selected' });
     if (!campuses || !campuses.length) return res.status(400).json({ error: 'No campuses selected' });
 
@@ -416,7 +449,8 @@ app.post('/api/send-report', auth, adminOnly, async (req, res) => {
       return res.status(500).json({ error: 'No email credentials found in .env (set GMAIL_USER + GMAIL_APP_PASSWORD or OUTLOOK_EMAIL + OUTLOOK_PASSWORD)' });
 
     const sortedYears = [...years].map(Number).sort((a, b) => b - a);
-    const results     = await buildReport(sortedYears, campuses);
+    const reportMode  = mode ? normalizeMode(mode) : (settings?.mode ? normalizeMode(settings.mode) : 'regular');
+    const results     = await buildReport(sortedYears, campuses, reportMode);
     const html        = buildEmailHTML(sortedYears, campuses, results);
 
     const today  = new Date();
@@ -592,6 +626,20 @@ function toLocalDate(str) {
   return new Date(str + 'T00:00:00Z');
 }
 
+function normalizeMode(raw) {
+  const v = (raw || '').toString().trim().toLowerCase();
+  if (v === 'online') return 'online';
+  return 'regular';
+}
+
+function modeCourseQuery(mode) {
+  const m = normalizeMode(mode);
+  // "Online" means courseName contains the word "online" anywhere (case-insensitive)
+  if (m === 'online') return { courseName: { $regex: /online/i } };
+  // "Regular" means courseName does NOT contain "online" (or is empty)
+  return { $or: [{ courseName: { $not: /online/i } }, { courseName: { $exists: false } }, { courseName: null }, { courseName: '' }] };
+}
+
 function buildDateFilter(dateField, start, end, extra) {
   const q = { [dateField]: { $gte: start, $lte: end } };
   if (extra.campus) {
@@ -604,6 +652,10 @@ function buildDateFilter(dateField, start, end, extra) {
     }
   }
   if (extra.course) q.courseName = extra.course;
+  if (extra.mode) {
+    q.$and = q.$and || [];
+    q.$and.push(modeCourseQuery(extra.mode));
+  }
   if (extra.year) {
     const dateStrField = dateField === 'enquiryDateParsed' ? 'dateOfEnquiry' : dateField === 'registrationDateParsed' ? 'dateOfRegistration' : 'dateOfAdmission';
     q[dateStrField] = { $regex: extra.year };
@@ -625,26 +677,27 @@ const mapDoc = (s, campusField, dateStrField) => ({
 
 app.get('/api/students', auth, async (req, res) => {
   try {
-    const { startDate, endDate } = req.query;
+    const { startDate, endDate, mode } = req.query;
     if (!startDate || !endDate) return res.status(400).json({ error: 'startDate and endDate required' });
 
     const start = toLocalDate(startDate), end = toLocalDate(endDate);
     end.setHours(23, 59, 59, 999);
     const dateRange = { $gte: start, $lte: end };
+    const modeQ = modeCourseQuery(mode);
 
     const [enqCount, regCount, admCount, campusList, courseList, yearList] = await Promise.all([
-      Student.countDocuments({ enquiryDateParsed: dateRange }),
-      Student.countDocuments({ registrationDateParsed: dateRange }),
-      Student.countDocuments({ admissionDateParsed: dateRange }),
+      Student.countDocuments({ enquiryDateParsed: dateRange, ...modeQ }),
+      Student.countDocuments({ registrationDateParsed: dateRange, ...modeQ }),
+      Student.countDocuments({ admissionDateParsed: dateRange, ...modeQ }),
       Student.distinct('enquiredCenter').then(a => Student.distinct('registeredCenter').then(b => Student.distinct('admittedCenter').then(c => Student.distinct('campus').then(d => {
         const allRaw = [...a,...b,...c,...d].filter(Boolean);
         const codes = [...new Set(allRaw.map(normalizeCampus))].filter(Boolean);
         return codes.map(displayCampus).sort();
       })))),
-      Student.distinct('courseName').then(arr => arr.filter(Boolean).sort()),
-      Student.aggregate([{ $match:{ enquiryDateParsed: dateRange }},{ $project:{ y:{$year:'$enquiryDateParsed'}}},{ $group:{_id:'$y'}},{ $sort:{_id:1}}]).then(async enqYears => {
-        const regYears = await Student.aggregate([{ $match:{ registrationDateParsed: dateRange }},{ $project:{ y:{$year:'$registrationDateParsed'}}},{ $group:{_id:'$y'}}]);
-        const admYears = await Student.aggregate([{ $match:{ admissionDateParsed: dateRange }},{ $project:{ y:{$year:'$admissionDateParsed'}}},{ $group:{_id:'$y'}}]);
+      Student.distinct('courseName', modeQ).then(arr => arr.filter(Boolean).sort()),
+      Student.aggregate([{ $match:{ enquiryDateParsed: dateRange, ...modeQ }},{ $project:{ y:{$year:'$enquiryDateParsed'}}},{ $group:{_id:'$y'}},{ $sort:{_id:1}}]).then(async enqYears => {
+        const regYears = await Student.aggregate([{ $match:{ registrationDateParsed: dateRange, ...modeQ }},{ $project:{ y:{$year:'$registrationDateParsed'}}},{ $group:{_id:'$y'}}]);
+        const admYears = await Student.aggregate([{ $match:{ admissionDateParsed: dateRange, ...modeQ }},{ $project:{ y:{$year:'$admissionDateParsed'}}},{ $group:{_id:'$y'}}]);
         return [...new Set([...enqYears,...regYears,...admYears].map(r=>r._id))].filter(Boolean).sort().map(String);
       })
     ]);
@@ -655,13 +708,13 @@ app.get('/api/students', auth, async (req, res) => {
 
 app.get('/api/students/page', auth, async (req, res) => {
   try {
-    const { startDate, endDate, tab, page=1, limit=30, campus, course, year, search } = req.query;
+    const { startDate, endDate, tab, page=1, limit=30, campus, course, year, search, mode } = req.query;
     if (!startDate || !endDate || !tab) return res.status(400).json({ error: 'startDate, endDate, tab required' });
 
     const start = toLocalDate(startDate), end = toLocalDate(endDate);
     end.setHours(23, 59, 59, 999);
     const pg = Math.max(1, parseInt(page)), lim = Math.min(100, Math.max(1, parseInt(limit) || 30)), skip = (pg-1)*lim;
-    const extra = { campus, course, year, search };
+    const extra = { campus, course, year, search, mode };
 
     if (tab === 'all') {
       const [enqDocs, regDocs, admDocs] = await Promise.all([
@@ -690,12 +743,12 @@ app.get('/api/students/page', auth, async (req, res) => {
 
 app.get('/api/students/export', auth, async (req, res) => {
   try {
-    const { startDate, endDate, tab, campus, course, year, search } = req.query;
+    const { startDate, endDate, tab, campus, course, year, search, mode } = req.query;
     if (!startDate || !endDate || !tab) return res.status(400).json({ error: 'startDate, endDate, tab required' });
 
     const start = toLocalDate(startDate), end = toLocalDate(endDate);
     end.setHours(23, 59, 59, 999);
-    const extra = { campus, course, year, search };
+    const extra = { campus, course, year, search, mode };
 
     if (tab==='all' || tab==='allSheets') {
       const [enqDocs, regDocs, admDocs] = await Promise.all([
@@ -745,13 +798,17 @@ app.delete('/api/batch/:batchId', auth, adminOnly, async (req, res) => {
 });
 
 app.get('/api/count', auth, async (req, res) => {
-  try { const count = await Student.countDocuments(); res.json({ count }); }
+  try {
+    const { mode } = req.query;
+    const count = await Student.countDocuments(mode ? modeCourseQuery(mode) : {});
+    res.json({ count });
+  }
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.get('/api/compare', auth, async (req, res) => {
   try {
-    const { startMonth, startDay, endMonth, endDay, year1, year2, year3, campus, course } = req.query;
+    const { startMonth, startDay, endMonth, endDay, year1, year2, year3, campus, course, mode } = req.query;
     if (!startMonth||!startDay||!endMonth||!endDay||!year1||!year2||!year3) return res.status(400).json({ error: 'All params required' });
 
     const y1=parseInt(year1), y2=parseInt(year2), y3=parseInt(year3);
@@ -760,7 +817,7 @@ app.get('/api/compare', auth, async (req, res) => {
     const start1=new Date(Date.UTC(y1,sm,sd)), end1=new Date(Date.UTC(y1,em,ed,23,59,59,999));
     const start2=new Date(Date.UTC(y2,sm,sd)), end2=new Date(Date.UTC(y2,em,ed,23,59,59,999));
     const start3=new Date(Date.UTC(y3,sm,sd)), end3=new Date(Date.UTC(y3,em,ed,23,59,59,999));
-    const extra = { campus: campus||'', course: course||'' };
+    const extra = { campus: campus||'', course: course||'', mode };
 
     const [enq1,reg1,adm1,enq2,reg2,adm2,enq3,reg3,adm3] = await Promise.all([
       Student.countDocuments(buildDateFilter('enquiryDateParsed',start1,end1,extra)),
@@ -784,7 +841,7 @@ app.get('/api/compare', auth, async (req, res) => {
 
 app.get('/api/compare/export', auth, async (req, res) => {
   try {
-    const { startMonth, startDay, endMonth, endDay, year1, year2, year3, campus, course } = req.query;
+    const { startMonth, startDay, endMonth, endDay, year1, year2, year3, campus, course, mode } = req.query;
     if (!startMonth||!startDay||!endMonth||!endDay||!year1||!year2||!year3) return res.status(400).json({ error: 'All params required' });
 
     const y1=parseInt(year1), y2=parseInt(year2), y3=parseInt(year3);
@@ -793,7 +850,7 @@ app.get('/api/compare/export', auth, async (req, res) => {
     const start1=new Date(Date.UTC(y1,sm,sd)), end1=new Date(Date.UTC(y1,em,ed,23,59,59,999));
     const start2=new Date(Date.UTC(y2,sm,sd)), end2=new Date(Date.UTC(y2,em,ed,23,59,59,999));
     const start3=new Date(Date.UTC(y3,sm,sd)), end3=new Date(Date.UTC(y3,em,ed,23,59,59,999));
-    const extra = { campus: campus||'', course: course||'' };
+    const extra = { campus: campus||'', course: course||'', mode };
 
     const [enq1,reg1,adm1,enq2,reg2,adm2,enq3,reg3,adm3] = await Promise.all([
       Student.find(buildDateFilter('enquiryDateParsed',start1,end1,extra),listProjection).lean(),
