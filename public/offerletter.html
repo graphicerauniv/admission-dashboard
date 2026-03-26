@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>GEU Offer Letter Editor</title>
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500;600&family=Playfair+Display:wght@700&display=swap" rel="stylesheet"/>
+<style>
+  /* ── RESET & BASE ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --ink:    #1a1a2e;
+    --mid:    #4a4a6a;
+    --light:  #8888aa;
+    --geu-blue:  #2b2d8e;
+    --geu-gold:  #f5a623;
+    --geu-dark:  #1a1c6e;
+    --bg:     #f0eff8;
+    --panel:  #ffffff;
+    --border: #dddde8;
+    --accent: #2b2d8e;
+    --field-bg: #f7f7fc;
+    --radius: 10px;
+  }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── TOP BAR ── */
+  .topbar {
+    background: var(--geu-blue);
+    color: #fff;
+    padding: 14px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 2px 12px rgba(43,45,142,.25);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .topbar-title {
+    font-size: 1.05rem;
+    font-weight: 600;
+    letter-spacing: .03em;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .topbar-title svg { opacity: .85; }
+  .topbar-actions { display: flex; gap: 10px; }
+
+  /* ── BUTTONS ── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 20px;
+    border-radius: 7px;
+    font-family: inherit;
+    font-size: .875rem;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    transition: all .18s ease;
+  }
+  .btn-ghost {
+    background: rgba(255,255,255,.12);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,.25);
+  }
+  .btn-ghost:hover { background: rgba(255,255,255,.22); }
+  .btn-primary {
+    background: var(--geu-gold);
+    color: var(--geu-dark);
+  }
+  .btn-primary:hover { background: #f0b73e; transform: translateY(-1px); box-shadow: 0 4px 14px rgba(245,166,35,.4); }
+  .btn-danger {
+    background: rgba(220,53,69,.15);
+    color: #dc3545;
+    border: 1px solid rgba(220,53,69,.25);
+  }
+  .btn-danger:hover { background: rgba(220,53,69,.25); }
+
+  /* ── LAYOUT ── */
+  .workspace {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 0;
+    flex: 1;
+    min-height: calc(100vh - 57px);
+  }
+
+  /* ── EDITOR PANEL ── */
+  .editor-panel {
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 24px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .section-label {
+    font-size: .7rem;
+    font-weight: 600;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--light);
+    padding: 14px 4px 6px;
+    margin-top: 8px;
+  }
+  .field-row { display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px; }
+  .field-row label {
+    font-size: .8rem;
+    font-weight: 500;
+    color: var(--mid);
+  }
+  .field-row input, .field-row select {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--field-bg);
+    font-family: inherit;
+    font-size: .875rem;
+    color: var(--ink);
+    transition: border-color .15s;
+    outline: none;
+  }
+  .field-row input:focus, .field-row select:focus {
+    border-color: var(--geu-blue);
+    background: #fff;
+  }
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 12px 0 4px;
+  }
+  .hint {
+    font-size: .75rem;
+    color: var(--light);
+    margin-top: 2px;
+  }
+
+  /* ── PREVIEW PANE ── */
+  .preview-pane {
+    background: #e8e8f4;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 36px 24px;
+  }
+  .preview-label {
+    font-size: .75rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--light);
+    font-weight: 600;
+    margin-bottom: 20px;
+  }
+
+  /* ── THE LETTER ── */
+  /* THE LETTER */
+.letter-wrap {
+  width: 794px;              /* keep A4 width */
+  max-width: 100%;
+
+  min-height: 1123px;        /* PERFECT A4 HEIGHT */
+  
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start; /* was space-between */
+  background: #fff;
+  box-shadow: 0 8px 40px rgba(43,45,142,.15);
+  border-radius: 4px;
+  overflow: hidden;
+
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+  /* GEU Header — matches real letterhead */
+  .letter-header {
+    background: linear-gradient(135deg, #2e3192 0%, #3b3faa 60%, #4a4fc0 100%);
+    padding: 18px 32px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .letter-logo {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    color: #fff;
+  }
+  /* Gear / emblem SVG container */
+  .logo-emblem {
+    width: 72px;
+    height: 72px;
+    flex-shrink: 0;
+  }
+  .logo-text { line-height: 1.15; }
+  .logo-text .geu-main {
+    font-family: 'Playfair Display', 'Crimson Pro', Georgia, serif;
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: -.01em;
+    color: #fff;
+    line-height: 1;
+  }
+  .logo-text .geu-dtb {
+    font-family: 'DM Sans', sans-serif;
+    font-size: .85rem;
+    font-weight: 400;
+    color: rgba(255,255,255,.85);
+    letter-spacing: .01em;
+    margin-top: 1px;
+  }
+  .logo-text .geu-dtb strong {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #fff;
+  }
+  .logo-text .geu-sub {
+    font-family: 'DM Sans', sans-serif;
+    font-size: .68rem;
+    letter-spacing: .22em;
+    font-weight: 600;
+    color: rgba(255,255,255,.7);
+    margin-top: 3px;
+  }
+  /* Right badges — NIRF + NAAC layout matching real header */
+  .header-badges {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .nirf-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #fff;
+  }
+  .nirf-logo-text {
+    font-family: 'DM Sans', sans-serif;
+    font-size: .6rem;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: .05em;
+    line-height: 1;
+    border-bottom: 2px solid #fff;
+    padding-bottom: 1px;
+  }
+  .nirf-rank {
+    display: flex;
+    align-items: baseline;
+    gap: 2px;
+  }
+  .nirf-rank .rank-small { font-size: .65rem; color: rgba(255,255,255,.7); font-family: 'DM Sans', sans-serif; }
+  .nirf-rank .rank-num { font-size: 2rem; font-weight: 800; color: var(--geu-gold); font-family: 'DM Sans', sans-serif; line-height: 1; }
+  .nirf-rank-label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: .65rem;
+    color: #fff;
+    line-height: 1.4;
+  }
+  .naac-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .naac-emblem {
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+  }
+  .naac-text {
+    font-family: 'DM Sans', sans-serif;
+  }
+  .naac-text .naac-title {
+    font-size: 1rem;
+    font-weight: 800;
+    color: var(--geu-gold);
+    line-height: 1;
+  }
+  .naac-text .naac-sub {
+    font-size: .65rem;
+    color: rgba(255,255,255,.8);
+    font-weight: 500;
+  }
+
+  /* Gold strip */
+  .letter-strip {
+    height: 5px;
+    background: linear-gradient(90deg, var(--geu-gold) 0%, #f5c842 100%);
+  }
+
+  /* Body */
+  .letter-body {
+    padding: 16px 36px 14px;
+    flex: 1; 
+    display: block; /* remove flex layout compression */
+    font-family: 'Crimson Pro', Georgia, serif;
+    font-size: 13px;
+    line-height: 1.45;
+    color: #222;
+  }
+  .letter-date {
+    font-size: 12px;
+    color: #555;
+    margin-bottom: 8px;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .letter-to {
+    margin-bottom: 6px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  .letter-to strong { font-weight: 600; }
+  .letter-subject {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12.5px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .letter-dear {
+    margin-bottom: 5px;
+  }
+  .letter-para { margin-bottom: 6px; }
+
+  /* Section headings */
+  .letter-section-title {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    margin: 8px 0 3px;
+    color: #111;
+  }
+  .letter-list {
+    list-style: disc;
+    padding-left: 18px;
+    margin-bottom: 5px;
+  }
+  .letter-list li { margin-bottom: 2px; font-size: 12.5px; }
+  .bullet-label { font-weight: 700; }
+
+  /* Footer */
+  .letter-footer-note {
+    border-top: 1px solid #e0e0e0;
+    padding-top: 6px;
+    margin-top: 4px;
+  }
+  .footer-next-page{
+    margin: 0;
+    padding: 0;
+    line-height: 0;
+  }
+  .footer-next-page img{
+    width: 100%;
+    display: block;
+    margin: 0;
+  }
+
+  .letter-sign {
+    margin-top: 1px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .letter-sign strong { font-size: 12.5px; }
+
+  .letter-footer {
+    background: var(--geu-blue);
+    color: rgba(255,255,255,.85);
+    padding: 14px 32px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+  }
+  .footer-address { margin-bottom: 6px; opacity: .9; }
+  .footer-contacts { display: flex; gap: 24px; flex-wrap: wrap; opacity: .8; font-size: 11.5px; }
+  .footer-contacts span { display: flex; align-items: center; gap: 5px; }
+  .letter-note {
+    background: #f9f9fb;
+    border-top: 1px solid #e0e0e0;
+    padding: 4px 32px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 10.5px;
+    color: #888;
+    font-style: italic;
+  }
+
+  /* ── PRINT STYLES ── */
+  @page { size: A4 portrait; margin: 0; }
+  @media print {
+    body { background: #fff !important; }
+    .topbar, .editor-panel, .preview-label { display: none !important; }
+    .workspace { display: block !important; }
+    .preview-pane { background: #fff !important; padding: 0 !important; align-items: stretch !important; }
+
+    .letter-wrap {
+      box-shadow: none !important;
+      border-radius: 0 !important;
+      width: 210mm !important;
+      height: 297mm !important;       /* lock to one page */
+      max-height: 297mm !important;
+      overflow: hidden !important;    /* prevent page 2 */
+    }
+
+    /* keep footer on SAME page */
+    .footer-next-page{
+      margin: 0 !important;
+      padding: 0 !important;
+      line-height: 0 !important;
+      break-before: auto !important;
+      page-break-before: auto !important;
+      break-inside: avoid !important;
+      page-break-inside: avoid !important;
+      margin-top: 6px;
+    }
+
+    /* remove old forced next-page rule completely */
+    .footer-next-page img{
+      width: 100%;
+      display: block;
+      margin: 0;
+    }
+  }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="topbar-title">
+    <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><path stroke="#fff" stroke-width="2" d="M9 12h6M9 16h4M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg>
+    GEU Offer Letter Editor
+  </div>
+  <div class="topbar-actions">
+    <button class="btn btn-ghost" onclick="resetForm()">
+      <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path stroke="currentColor" stroke-width="2" d="M3 3v5h5"/></svg>
+      Reset
+    </button>
+    <button class="btn btn-primary" onclick="window.print()">
+      <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path stroke="currentColor" stroke-width="2" d="M6 14h12v8H6z"/></svg>
+      Print / Save PDF
+    </button>
+  </div>
+</div>
+
+<!-- WORKSPACE -->
+<div class="workspace">
+
+  <!-- EDITOR PANEL -->
+  <div class="editor-panel">
+    <div class="section-label">📅 Date & Reference</div>
+    <div class="field-row">
+      <label>Date</label>
+      <input type="date" id="f_date" />
+    </div>
+    <div class="field-row">
+      <label>Admission Number</label>
+      <input type="text" id="f_admno" placeholder="e.g. GEU2026001" />
+    </div>
+
+    <div class="divider"></div>
+    <div class="section-label">👤 Student Details</div>
+    <div class="field-row">
+      <label>Student Name</label>
+      <input type="text" id="f_name" placeholder="Full Name" />
+    </div>
+    <div class="field-row">
+      <label>Father's Name</label>
+      <input type="text" id="f_father" placeholder="Father's Full Name" />
+    </div>
+    <div class="field-row">
+      <label>Address Line</label>
+      <input type="text" id="f_addr" placeholder="Street / Colony" />
+    </div>
+    <div class="field-row">
+      <label>City</label>
+      <input type="text" id="f_city" placeholder="City" />
+    </div>
+    <div class="field-row">
+      <label>State</label>
+      <input type="text" id="f_state" placeholder="State" />
+    </div>
+
+    <div class="divider"></div>
+    <div class="section-label">🎓 Program Details</div>
+    <div class="field-row">
+      <label>Program</label>
+      <input type="text" id="f_program" placeholder="e.g. Bachelor of Technology (CSE)" />
+    </div>
+    <div class="field-row">
+      <label>Department</label>
+      <input type="text" id="f_dept" placeholder="e.g. Computer Science & Engineering" />
+    </div>
+    <div class="field-row">
+      <label>Academic Session</label>
+      <input type="text" id="f_session" placeholder="e.g. 2026-2027" />
+    </div>
+
+    <div class="divider"></div>
+    <div class="section-label">💰 Fee Details</div>
+    <div class="field-row">
+      <label>Seat Booking Amount</label>
+      <input type="text" id="f_fee" placeholder="e.g. 85,000.00" />
+    </div>
+    <div class="field-row">
+      <label>Fee Payment Deadline</label>
+      <input type="date" id="f_feedue" />
+    </div>
+
+    <div class="divider"></div>
+    <div class="section-label">📆 Important Dates</div>
+    <div class="field-row">
+      <label>Reporting Date on Campus</label>
+      <input type="date" id="f_report" />
+    </div>
+  </div>
+
+  <!-- PREVIEW PANE -->
+  <div class="preview-pane">
+    <div class="preview-label">Live Preview — What you see is what prints</div>
+    <div class="letter-wrap" id="letter">
+
+      <!-- HEADER — real GEU image -->
+      <img src="image/image.png" alt="GEU Header" style="width:100%;display:block;"/>
+
+      <!-- BODY -->
+      <div class="letter-body">
+        <div class="letter-date">Date: <span id="o_date">..................</span></div>
+
+        <div class="letter-to">
+          <strong>To,</strong><br/>
+          <span id="o_name">Student Name</span><br/>
+          S/o Mr. <span id="o_father">Father Name</span><br/>
+          <span id="o_addr">Address Line,</span><br/>
+          <span id="o_city">City</span>, <span id="o_state">State</span>
+        </div>
+        <div class="letter-to" style="margin-top:-6px;">
+          <strong>Application Number:</strong> <span id="o_admno">XXXXXXX</span>
+        </div>
+
+        <div class="letter-subject">Subject: Offer of Admission</div>
+
+        <p class="letter-para letter-dear">Dear <span id="o_name2">Student Name</span>,</p>
+
+        <p class="letter-para">
+          We are pleased to offer you provisional admission to <strong>Graphic Era Deemed to be University, Dehradun</strong>, for the academic session <strong><span id="o_session">2026-2027</span></strong> in the following program:
+        </p>
+        <ul class="letter-list">
+          <li><span class="bullet-label">Program:</span> <span id="o_program">Bachelor of Technology (Computer Science &amp; Engineering)</span></li>
+          <li><span class="bullet-label">Department:</span> <span id="o_dept">Computer Science &amp; Engineering</span></li>
+        </ul>
+
+        <p class="letter-para">
+          Your admission is based on your application and the information provided during the selection process. This offer is subject to verification of your academic credentials and fulfilment of the eligibility criteria prescribed by the University.
+        </p>
+
+        <div class="letter-section-title">Fee Details</div>
+        <p class="letter-para">You are required to deposit the prescribed fee as per the schedule below:</p>
+        <ul class="letter-list">
+          <li><span class="bullet-label">Tuition Fee:</span> ₹<span id="o_fee">85,000.00</span> per semester</li>
+        </ul>
+        <p class="letter-para">The fee must be paid on or before <strong><span id="o_feedue">30/04/2026</span></strong> to confirm your admission.</p>
+
+        <div class="letter-section-title">Documents Required</div>
+        <p class="letter-para">At the time of admission, you are required to submit the following documents:</p>
+        <ul class="letter-list">
+          <li>Original and photocopies of mark sheets and certificates (Class X, XII, and Graduation if applicable)</li>
+          <li>Transfer Certificate (TC) / Migration Certificate</li>
+          <li>Character Certificate</li>
+          <li>Passport-size photographs</li>
+          <li>Valid ID proof</li>
+        </ul>
+
+        <div class="letter-section-title">Important Instructions</div>
+        <ul class="letter-list">
+          <li>Failure to submit the fee within the stipulated time will result in cancellation of this offer.</li>
+          <li>Admission is provisional and may be withdrawn if any information provided is found to be incorrect.</li>
+          <li>You are required to report to the campus on <strong><span id="o_report">15/07/2026</span></strong> for document verification and further formalities.</li>
+        </ul>
+
+        <p class="letter-para">
+          We congratulate you on your selection and look forward to welcoming you to the Graphic Era family. We are confident that your association with the University will be both enriching and rewarding.
+        </p>
+
+        <div class="letter-footer-note">
+          <p class="letter-para" style="margin-bottom:18px;">
+            For any queries, please contact the Admission Office at <strong>admissions@geu.ac.in</strong>, <strong>+91-135-2643033</strong>.
+          </p>
+          <p style="margin-top:6px;">Warm regards,</p>
+          <div class="letter-sign">
+            <strong>Admissions Office</strong><br/>
+            Graphic Era Deemed to be University<br/>
+            Dehradun, Uttarakhand
+          </div>
+        </div>
+              <div class="letter-note">Note: This is a system-generated offer letter and does not require a physical signature.</div>
+      </div><!-- /letter-body -->
+
+      <!-- FOOTER — full width -->
+      <div class="footer-next-page">
+        <img src="image/imgcopy.png" alt="GEU Footer" />
+      </div>
+
+    </div><!-- /letter-wrap -->
+  </div><!-- /preview-pane -->
+</div><!-- /workspace -->
+
+<script>
+  // Format date to DD/MM/YYYY
+  function fmtDate(val) {
+    if (!val) return '..................';
+    const [y, m, d] = val.split('-');
+    return d + '/' + m + '/' + y;
+  }
+
+  function getVal(id) {
+    var el = document.getElementById(id);
+    return el ? el.value.trim() : '';
+  }
+
+  function setVal(id, val, fallback) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = (val && val.length > 0) ? val : (fallback || '');
+  }
+
+  function update() {
+    var date    = getVal('f_date');
+    var admno   = getVal('f_admno');
+    var name    = getVal('f_name');
+    var father  = getVal('f_father');
+    var addr    = getVal('f_addr');
+    var city    = getVal('f_city');
+    var state   = getVal('f_state');
+    var program = getVal('f_program');
+    var dept    = getVal('f_dept');
+    var session = getVal('f_session');
+    var fee     = getVal('f_fee');
+    var feedue  = getVal('f_feedue');
+    var report  = getVal('f_report');
+
+    setVal('o_date',    date    ? fmtDate(date)   : '..................');
+    setVal('o_admno',   admno,   'XXXXXXX');
+    setVal('o_name',    name,    'Student Name');
+    setVal('o_name2',   name,    'Student Name');
+    setVal('o_father',  father,  'Father Name');
+    setVal('o_addr',    addr ? addr + ',' : '',    'Address Line,');
+    setVal('o_city',    city,    'City');
+    setVal('o_state',   state,   'State');
+    setVal('o_program', program, 'Bachelor of Technology (Computer Science & Engineering)');
+    setVal('o_dept',    dept,    'Computer Science & Engineering');
+    setVal('o_session', session, '2026-2027');
+    setVal('o_fee',     fee,     '85,000.00');
+    setVal('o_feedue',  feedue  ? fmtDate(feedue) : '', '30/04/2026');
+    setVal('o_report',  report  ? fmtDate(report) : '', '15/07/2026');
+  }
+
+  function resetForm() {
+    var ids = ['f_date','f_admno','f_name','f_father','f_addr','f_city','f_state',
+               'f_program','f_dept','f_session','f_fee','f_feedue','f_report'];
+    ids.forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    // Restore defaults
+    document.getElementById('f_program').value = 'Bachelor of Technology (Computer Science & Engineering)';
+    document.getElementById('f_dept').value    = 'Computer Science & Engineering';
+    document.getElementById('f_session').value = '2026-2027';
+    document.getElementById('f_fee').value     = '85,000.00';
+    update();
+  }
+
+  // Attach listeners on DOMContentLoaded
+  document.addEventListener('DOMContentLoaded', function() {
+    var ids = ['f_date','f_admno','f_name','f_father','f_addr','f_city','f_state',
+               'f_program','f_dept','f_session','f_fee','f_feedue','f_report'];
+    ids.forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) {
+        el.addEventListener('input', update);
+        el.addEventListener('change', update);
+      }
+    });
+
+    // Set defaults
+    document.getElementById('f_program').value = 'Bachelor of Technology (Computer Science & Engineering)';
+    document.getElementById('f_dept').value    = 'Computer Science & Engineering';
+    document.getElementById('f_session').value = '2026-2027';
+    document.getElementById('f_fee').value     = '85,000.00';
+    update();
+  });
+</script>

@@ -420,6 +420,7 @@ tbody tr{transition:background .1s;}
   <div class="nav-links">
     <button class="nav-link active" id="navDashboard" onclick="switchView('dashboard')">Dashboard</button>
     <button class="nav-link" id="navCompare" onclick="switchView('compare')">Compare</button>
+    <button class="nav-link" id="navOfferletter" onclick="switchView('offerletter')">Offerletter</button>
     <button class="nav-link admin-only" id="navAdmin" onclick="switchView('admin')" style="display:none;">Admin Panel</button>
     <button class="nav-link admin-only" onclick="window.open('https://automation-vfze.onrender.com/','_blank')" style="display:none;background:rgba(234,88,12,0.18);color:#fb923c;">⚡ Automation</button>
   </div>
@@ -694,6 +695,16 @@ tbody tr{transition:background .1s;}
   </div>
 </div>
 
+<!-- ═══════════ OFFER LETTER VIEW ═══════════ -->
+<div class="main-content hidden" id="viewOfferletter" style="padding:0;max-width:none;">
+  <iframe
+    id="offerletterFrame"
+    title="GEU Offer Letter Editor"
+    src=""
+    style="width:100%;height:calc(100vh - 60px);border:none;background:#fff;"
+  ></iframe>
+</div>
+
 </div><!-- /dashboardPage -->
 
 <!-- ═══════════ Student Detail Modal ═══════════ -->
@@ -881,13 +892,36 @@ function switchView(view){
   document.getElementById('viewDashboard').classList.add('hidden');
   document.getElementById('viewAdmin').classList.add('hidden');
   document.getElementById('viewCompare').classList.add('hidden');
+  document.getElementById('viewOfferletter').classList.add('hidden');
+
   document.getElementById('navDashboard').classList.remove('active');
   document.getElementById('navAdmin').classList.remove('active');
   document.getElementById('navCompare').classList.remove('active');
+  document.getElementById('navOfferletter').classList.remove('active');
 
-  if(view==='admin'){ document.getElementById('viewAdmin').classList.remove('hidden'); document.getElementById('navAdmin').classList.add('active'); }
-  else if(view==='compare'){ document.getElementById('viewCompare').classList.remove('hidden'); document.getElementById('navCompare').classList.add('active'); populateCompareDropdowns(); }
-  else{ document.getElementById('viewDashboard').classList.remove('hidden'); document.getElementById('navDashboard').classList.add('active'); }
+  if(view==='admin'){
+    document.getElementById('viewAdmin').classList.remove('hidden');
+    document.getElementById('navAdmin').classList.add('active');
+  }
+  else if(view==='compare'){
+    document.getElementById('viewCompare').classList.remove('hidden');
+    document.getElementById('navCompare').classList.add('active');
+    populateCompareDropdowns();
+  }
+  else if(view==='offerletter'){
+    document.getElementById('viewOfferletter').classList.remove('hidden');
+    document.getElementById('navOfferletter').classList.add('active');
+
+    const frame = document.getElementById('offerletterFrame');
+    const currentSrc = frame.getAttribute('src'); // raw attribute value
+    if(!currentSrc || currentSrc.trim()===''){
+      frame.setAttribute('src', 'offerletter.html'); // same public folder
+    }
+  }
+  else{
+    document.getElementById('viewDashboard').classList.remove('hidden');
+    document.getElementById('navDashboard').classList.add('active');
+  }
 }
 
 (function checkSession(){
