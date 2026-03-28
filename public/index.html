@@ -423,7 +423,7 @@ tbody tr{transition:background .1s;}
     <button class="nav-link" id="navOfferletter" onclick="switchView('offerletter')">Offerletter</button>
     <button class="nav-link admin-only" id="navAdmin" onclick="switchView('admin')" style="display:none;">Admin Panel</button>
     <button class="nav-link admin-only" onclick="window.open('https://automation-vfze.onrender.com/','_blank')" style="display:none;background:rgba(234,88,12,0.18);color:#fb923c;">⚡ Automation</button>
-
+    <button class="nav-link admin-only" id="navSMTP" onclick="switchView('smtp')" style="display:none;">📧 Send SMTP</button>
   </div>
   <div class="nav-right">
     <!-- Send Report button — admin only -->
@@ -696,6 +696,147 @@ tbody tr{transition:background .1s;}
   </div>
 </div>
 
+
+<!-- ═══════════ SEND SMTP VIEW ═══════════ -->
+<div class="main-content hidden" id="viewSMTP">
+  
+  <!-- Tabs -->
+  <div class="section-card" style="margin-bottom:16px;">
+    <div class="section-body" style="padding:16px 24px;">
+      <div class="tabs" style="border-bottom:2px solid var(--border);padding-bottom:0;margin-bottom:0;">
+        <button class="tab-btn active" data-smtp-tab="send" onclick="showSMTPTab('send')">📧 Send Campaign</button>
+        <button class="tab-btn" data-smtp-tab="campaigns" onclick="showSMTPTab('campaigns')">📊 Campaigns</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Send Campaign Tab -->
+  <div id="smtpSendTab" class="smtp-tab-content">
+    <div class="section-card">
+      <div class="section-header">
+        <div class="section-title"><span class="icon" style="background:var(--accent-light);color:var(--accent);">✉️</span>Create Email Campaign</div>
+      </div>
+      <div class="section-body">
+        
+        <!-- Step 1: Upload Email List -->
+        <div style="margin-bottom:24px;padding-bottom:24px;border-bottom:2px solid var(--border);">
+          <h3 style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+            <span style="background:var(--accent);color:white;width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;">1</span>
+            Upload Email List (CSV or XLSX)
+          </h3>
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+            <input type="file" id="smtpEmailFile" accept=".csv,.xlsx,.xls" style="flex:1;">
+            <button class="btn-accent" onclick="uploadSMTPFile()">📤 Upload & Extract Emails</button>
+          </div>
+          <p style="font-size:12px;color:var(--text-muted);margin-top:8px;">
+            File must have an "Email" column. Supported formats: CSV, XLSX, XLS
+          </p>
+          <div id="smtpUploadStatus" style="margin-top:12px;padding:10px 14px;border-radius:6px;font-size:13px;font-weight:600;display:none;"></div>
+          <div id="smtpEmailList" style="margin-top:12px;display:none;">
+            <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px;">
+              Extracted Emails: <span id="smtpEmailCount" style="color:var(--accent);font-weight:700;">0</span>
+            </div>
+            <div id="smtpEmailPreview" style="max-height:150px;overflow-y:auto;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;font-size:12px;font-family:monospace;"></div>
+          </div>
+        </div>
+
+        <!-- Step 2: Compose Email -->
+        <div style="margin-bottom:24px;padding-bottom:24px;border-bottom:2px solid var(--border);">
+          <h3 style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+            <span style="background:var(--accent);color:white;width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;">2</span>
+            Compose Email
+          </h3>
+          
+          <div style="margin-bottom:12px;">
+            <label style="display:block;margin-bottom:4px;font-size:13px;font-weight:600;">Campaign Name</label>
+            <input type="text" id="smtpCampaignName" placeholder="e.g., Admission Deadline Reminder - April 2026" style="width:100%;">
+          </div>
+
+          <div style="margin-bottom:12px;">
+            <label style="display:block;margin-bottom:4px;font-size:13px;font-weight:600;">Subject Line</label>
+            <input type="text" id="smtpSubject" placeholder="e.g., Important: Complete Your Admission by April 30th" style="width:100%;">
+          </div>
+
+          <div style="margin-bottom:12px;">
+            <label style="display:block;margin-bottom:8px;font-size:13px;font-weight:600;">HTML Content</label>
+            <textarea id="smtpHTMLContent" rows="12" style="width:100%;font-family:monospace;font-size:12px;padding:12px;border:1.5px solid var(--border);border-radius:var(--radius);background:var(--surface);" placeholder="Paste your HTML email code here..."></textarea>
+            <details style="margin-top:8px;">
+              <summary style="cursor:pointer;font-size:12px;color:var(--accent);font-weight:600;">📎 View Sample HTML Template</summary>
+              <pre style="margin-top:8px;background:var(--primary);color:#e2e8f0;padding:14px;border-radius:6px;font-size:11px;overflow-x:auto;max-height:400px;">&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;
+  &lt;meta charset="UTF-8"&gt;
+  &lt;style&gt;
+    body { font-family: Arial, sans-serif; background: #f4f4f4; padding: 20px; }
+    .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; }
+    .header { color: #0066cc; text-align: center; margin-bottom: 20px; }
+    .button { display: inline-block; background: #0066cc; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; }
+  &lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+  &lt;div class="container"&gt;
+    &lt;div class="header"&gt;
+      &lt;h1&gt;📚 Graphic Era University&lt;/h1&gt;
+    &lt;/div&gt;
+    &lt;p&gt;Dear Student,&lt;/p&gt;
+    &lt;p&gt;This is a reminder that the admission deadline is approaching.&lt;/p&gt;
+    &lt;div style="text-align: center;"&gt;
+      &lt;a href="https://geu.ac.in/apply" class="button"&gt;Complete Application&lt;/a&gt;
+    &lt;/div&gt;
+    &lt;p&gt;Best regards,&lt;br&gt;Admissions Team&lt;/p&gt;
+  &lt;/div&gt;
+&lt;/body&gt;
+&lt;/html&gt;</pre>
+            </details>
+          </div>
+        </div>
+
+        <!-- Step 3: Preview & Send -->
+        <div>
+          <h3 style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+            <span style="background:var(--accent);color:white;width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;">3</span>
+            Preview & Send
+          </h3>
+          
+          <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;">
+            <button class="btn-purple" onclick="previewSMTPEmail()">👁️ Preview Email</button>
+            <button class="btn-success" id="smtpSendBtn" onclick="sendSMTPCampaign()" disabled>🚀 Send Campaign</button>
+            <span id="smtpSendStatus" style="font-size:12px;font-weight:600;"></span>
+          </div>
+
+          <!-- Preview iframe -->
+          <div id="smtpPreviewWrap" style="display:none;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-top:16px;">
+            <div style="background:var(--primary-light);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;">
+              <span style="color:#e2e8f0;font-size:13px;font-weight:600;">📧 Email Preview</span>
+              <button class="btn-sm btn-ghost" onclick="document.getElementById('smtpPreviewWrap').style.display='none'" style="color:#94a3b8;">Close Preview</button>
+            </div>
+            <iframe id="smtpPreviewFrame" style="width:100%;height:500px;border:none;background:white;"></iframe>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Campaigns Tab -->
+  <div id="smtpCampaignsTab" class="smtp-tab-content" style="display:none;">
+    <div class="section-card">
+      <div class="section-header">
+        <div class="section-title"><span class="icon" style="background:var(--success-light);color:var(--success-dark);">📊</span>Email Campaigns</div>
+        <button class="btn-sm btn-outline" onclick="loadSMTPCampaigns()">🔄 Refresh</button>
+      </div>
+      <div class="section-body">
+        <div id="smtpCampaignsList">
+          <div style="text-align:center;padding:40px;color:var(--text-muted);">
+            <div style="font-size:36px;margin-bottom:12px;">📭</div>
+            <p>No campaigns yet. Create your first campaign in the Send tab!</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /viewSMTP -->
 <!-- ═══════════ OFFER LETTER VIEW ═══════════ -->
 <div class="main-content hidden" id="viewOfferletter" style="padding:0;max-width:none;">
   <iframe
@@ -894,11 +1035,13 @@ function switchView(view){
   document.getElementById('viewAdmin').classList.add('hidden');
   document.getElementById('viewCompare').classList.add('hidden');
   document.getElementById('viewOfferletter').classList.add('hidden');
+  document.getElementById('viewSMTP').classList.add('hidden');
 
   document.getElementById('navDashboard').classList.remove('active');
   document.getElementById('navAdmin').classList.remove('active');
   document.getElementById('navCompare').classList.remove('active');
   document.getElementById('navOfferletter').classList.remove('active');
+  document.getElementById('navSMTP').classList.remove('active');
 
   if(view==='admin'){
     document.getElementById('viewAdmin').classList.remove('hidden');
@@ -912,12 +1055,16 @@ function switchView(view){
   else if(view==='offerletter'){
     document.getElementById('viewOfferletter').classList.remove('hidden');
     document.getElementById('navOfferletter').classList.add('active');
-
     const frame = document.getElementById('offerletterFrame');
-    const currentSrc = frame.getAttribute('src'); // raw attribute value
+    const currentSrc = frame.getAttribute('src');
     if(!currentSrc || currentSrc.trim()===''){
-      frame.setAttribute('src', 'offerletter.html'); // same public folder
+      frame.setAttribute('src', 'offerletter.html');
     }
+  }
+  else if(view==='smtp'){
+    document.getElementById('viewSMTP').classList.remove('hidden');
+    document.getElementById('navSMTP').classList.add('active');
+    loadSMTPCampaigns();
   }
   else{
     document.getElementById('viewDashboard').classList.remove('hidden');
@@ -1899,6 +2046,412 @@ async function downloadComparisonExcel(){
     XLSX.writeFile(wb,'GEU_Comparison_'+d.year1.year+'_'+d.year2.year+'_'+d.year3.year+'.xlsx');
   }catch(e){ alert('Export failed: '+e.message); }
   finally{ hideLoading(); }
+}
+
+// ════════════════════════════════════════════════════
+// ─── SMTP MAIL CAMPAIGN FUNCTIONS ──────────────────
+// ════════════════════════════════════════════════════
+
+let smtpExtractedEmails = [];
+
+function showSMTPTab(tab){
+  document.querySelectorAll('[data-smtp-tab]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.smtpTab === tab);
+  });
+  
+  if(tab === 'send'){
+    document.getElementById('smtpSendTab').style.display = 'block';
+    document.getElementById('smtpCampaignsTab').style.display = 'none';
+  } else {
+    document.getElementById('smtpSendTab').style.display = 'none';
+    document.getElementById('smtpCampaignsTab').style.display = 'block';
+    loadSMTPCampaigns();
+  }
+}
+
+async function uploadSMTPFile(){
+  const fileInput = document.getElementById('smtpEmailFile');
+  const file = fileInput.files[0];
+  const statusEl = document.getElementById('smtpUploadStatus');
+  
+  if(!file){
+    statusEl.style.display = 'block';
+    statusEl.style.background = 'var(--danger-light)';
+    statusEl.style.color = 'var(--danger-dark)';
+    statusEl.textContent = '✗ Please select a file first';
+    return;
+  }
+
+  statusEl.style.display = 'block';
+  statusEl.style.background = 'var(--warning-light)';
+  statusEl.style.color = 'var(--warning-dark)';
+  statusEl.textContent = '⏳ Uploading and extracting emails...';
+
+  const formData = new FormData();
+  formData.append('emailFile', file);
+
+  try {
+    const r = await authFetch('/api/smtp/upload', {
+      method: 'POST',
+      body: formData
+    });
+    const d = await r.json();
+    
+    if(!r.ok){
+      throw new Error(d.error || 'Upload failed');
+    }
+
+    smtpExtractedEmails = d.emails;
+    
+    statusEl.style.background = 'var(--success-light)';
+    statusEl.style.color = 'var(--success-dark)';
+    statusEl.textContent = `✓ Successfully extracted ${d.count} email${d.count !== 1 ? 's' : ''}`;
+    
+    document.getElementById('smtpEmailList').style.display = 'block';
+    document.getElementById('smtpEmailCount').textContent = d.count;
+    
+    const previewEl = document.getElementById('smtpEmailPreview');
+    const preview = d.emails.slice(0, 10).map((email, i) => `${i + 1}. ${email}`).join('\n');
+    previewEl.textContent = preview + (d.emails.length > 10 ? `\n... and ${d.emails.length - 10} more` : '');
+    
+    updateSMTPSendButton();
+  } catch(err) {
+    statusEl.style.background = 'var(--danger-light)';
+    statusEl.style.color = 'var(--danger-dark)';
+    statusEl.textContent = '✗ ' + err.message;
+    smtpExtractedEmails = [];
+    document.getElementById('smtpEmailList').style.display = 'none';
+  }
+}
+
+function updateSMTPSendButton(){
+  const btn = document.getElementById('smtpSendBtn');
+  const hasEmails = smtpExtractedEmails.length > 0;
+  const hasSubject = document.getElementById('smtpSubject').value.trim() !== '';
+  const hasHTML = document.getElementById('smtpHTMLContent').value.trim() !== '';
+  
+  btn.disabled = !(hasEmails && hasSubject && hasHTML);
+}
+
+document.getElementById('smtpSubject').addEventListener('input', updateSMTPSendButton);
+document.getElementById('smtpHTMLContent').addEventListener('input', updateSMTPSendButton);
+
+async function previewSMTPEmail(){
+  const html = document.getElementById('smtpHTMLContent').value.trim();
+  
+  if(!html){
+    alert('Please enter HTML content first');
+    return;
+  }
+
+  try {
+    const r = await authFetch('/api/smtp/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ htmlContent: html })
+    });
+    const d = await r.json();
+    
+    if(!r.ok){
+      throw new Error(d.error || 'Preview failed');
+    }
+
+    const iframe = document.getElementById('smtpPreviewFrame');
+    iframe.srcdoc = d.html;
+    document.getElementById('smtpPreviewWrap').style.display = 'block';
+  } catch(err) {
+    alert('Preview failed: ' + err.message);
+  }
+}
+
+async function sendSMTPCampaign(){
+  if(smtpExtractedEmails.length === 0){
+    alert('Please upload an email list first');
+    return;
+  }
+
+  const subject = document.getElementById('smtpSubject').value.trim();
+  const html = document.getElementById('smtpHTMLContent').value.trim();
+  const campaignName = document.getElementById('smtpCampaignName').value.trim() || 'Campaign ' + new Date().toISOString();
+
+  if(!subject){
+    alert('Please enter an email subject');
+    return;
+  }
+
+  if(!html){
+    alert('Please enter HTML content');
+    return;
+  }
+
+  const confirm = window.confirm(
+    `Send campaign to ${smtpExtractedEmails.length} recipient${smtpExtractedEmails.length !== 1 ? 's' : ''}?\n\n` +
+    `Campaign: ${campaignName}\n` +
+    `Subject: ${subject}\n\n` +
+    `This will send emails immediately in the background.`
+  );
+
+  if(!confirm) return;
+
+  const btn = document.getElementById('smtpSendBtn');
+  const statusEl = document.getElementById('smtpSendStatus');
+  
+  btn.disabled = true;
+  btn.textContent = '⏳ Sending...';
+  statusEl.style.color = 'var(--warning-dark)';
+  statusEl.textContent = 'Campaign starting...';
+
+  try {
+    const r = await authFetch('/api/smtp/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        emails: smtpExtractedEmails,
+        subject,
+        htmlContent: html,
+        campaignName
+      })
+    });
+    const d = await r.json();
+    
+    if(!r.ok){
+      throw new Error(d.error || 'Send failed');
+    }
+
+    statusEl.style.color = 'var(--success-dark)';
+    statusEl.textContent = `✓ Campaign started! Sending to ${d.totalRecipients} recipients in background.`;
+    
+    alert(
+      `Campaign Started Successfully!\n\n` +
+      `Recipients: ${d.totalRecipients}\n\n` +
+      `Emails are being sent in the background. Check the Campaigns tab to monitor progress.`
+    );
+
+    // Reset form
+    document.getElementById('smtpEmailFile').value = '';
+    document.getElementById('smtpCampaignName').value = '';
+    document.getElementById('smtpSubject').value = '';
+    document.getElementById('smtpHTMLContent').value = '';
+    document.getElementById('smtpEmailList').style.display = 'none';
+    document.getElementById('smtpUploadStatus').style.display = 'none';
+    smtpExtractedEmails = [];
+    
+    // Switch to campaigns tab
+    setTimeout(() => {
+      showSMTPTab('campaigns');
+    }, 2000);
+    
+  } catch(err) {
+    statusEl.style.color = 'var(--danger-dark)';
+    statusEl.textContent = '✗ ' + err.message;
+    alert('Campaign failed: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🚀 Send Campaign';
+  }
+}
+
+async function loadSMTPCampaigns(){
+  const listEl = document.getElementById('smtpCampaignsList');
+  listEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">Loading campaigns...</div>';
+
+  try {
+    const r = await authFetch('/api/smtp/campaigns');
+    const d = await r.json();
+    
+    if(!r.ok){
+      throw new Error(d.error || 'Failed to load campaigns');
+    }
+
+    const campaigns = d.campaigns || [];
+    
+    if(campaigns.length === 0){
+      listEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);"><div style="font-size:36px;margin-bottom:12px;">📭</div><p>No campaigns yet. Create your first campaign in the Send tab!</p></div>';
+      return;
+    }
+
+    let html = '<div style="display:grid;gap:16px;">';
+    
+    campaigns.forEach(c => {
+      const openRate = c.totalRecipients > 0 ? ((c.openedCount / c.totalRecipients) * 100).toFixed(1) : '0';
+      const clickRate = c.totalRecipients > 0 ? ((c.clickedCount / c.totalRecipients) * 100).toFixed(1) : '0';
+      const sentDate = c.sentAt ? new Date(c.sentAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Not sent yet';
+      
+      const statusColor = {
+        'sent': 'var(--success-dark)',
+        'sending': 'var(--warning-dark)',
+        'failed': 'var(--danger-dark)',
+        'draft': 'var(--text-muted)'
+      }[c.status] || 'var(--text-muted)';
+
+      html += `
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;transition:all 0.2s;">
+          <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:12px;">
+            <div style="flex:1;">
+              <h4 style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px;">${c.name}</h4>
+              <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Subject: ${c.subject || 'No subject'}</p>
+              <div style="display:flex;align-items:center;gap:12px;font-size:11px;color:var(--text-muted);">
+                <span>📅 ${sentDate}</span>
+                <span style="color:${statusColor};font-weight:600;text-transform:uppercase;">● ${c.status}</span>
+              </div>
+            </div>
+            <div style="display:flex;gap:6px;">
+              <button class="btn-sm btn-outline" onclick="viewSMTPCampaign('${c._id}')">View Details</button>
+              <button class="btn-sm btn-danger" onclick="deleteSMTPCampaign('${c._id}', '${c.name}')">Delete</button>
+            </div>
+          </div>
+          
+          <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
+            <div style="text-align:center;">
+              <div style="font-size:20px;font-weight:800;color:var(--text);">${c.totalRecipients}</div>
+              <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-top:2px;">Recipients</div>
+            </div>
+            <div style="text-align:center;">
+              <div style="font-size:20px;font-weight:800;color:var(--success-dark);">${c.sentCount || 0}</div>
+              <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-top:2px;">Sent</div>
+            </div>
+            <div style="text-align:center;">
+              <div style="font-size:20px;font-weight:800;color:var(--info);">${c.openedCount || 0}</div>
+              <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-top:2px;">Opened (${openRate}%)</div>
+            </div>
+            <div style="text-align:center;">
+              <div style="font-size:20px;font-weight:800;color:var(--accent);">${c.clickedCount || 0}</div>
+              <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-top:2px;">Clicked (${clickRate}%)</div>
+            </div>
+            <div style="text-align:center;">
+              <div style="font-size:20px;font-weight:800;color:var(--danger-dark);">${c.failedCount || 0}</div>
+              <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-top:2px;">Failed</div>
+            </div>
+          </div>
+        </div>
+      `;
+    });
+    
+    html += '</div>';
+    listEl.innerHTML = html;
+    
+  } catch(err) {
+    listEl.innerHTML = `<div style="text-align:center;padding:40px;color:var(--danger-dark);">Error loading campaigns: ${err.message}</div>`;
+  }
+}
+
+async function viewSMTPCampaign(campaignId){
+  showLoading('Loading campaign details...');
+  
+  try {
+    const r = await authFetch('/api/smtp/campaign/' + campaignId);
+    const d = await r.json();
+    
+    if(!r.ok){
+      throw new Error(d.error || 'Failed to load campaign');
+    }
+
+    const campaign = d.campaign;
+    
+    // Build recipient table
+    let recipientRows = '';
+    campaign.recipients.forEach((rec, i) => {
+      const statusColors = {
+        'sent': 'var(--success-dark)',
+        'pending': 'var(--warning-dark)',
+        'failed': 'var(--danger-dark)',
+        'opened': 'var(--info)',
+        'clicked': 'var(--accent)'
+      };
+      
+      const statusColor = statusColors[rec.status] || 'var(--text-muted)';
+      
+      recipientRows += `
+        <tr>
+          <td>${i + 1}</td>
+          <td>${rec.email}</td>
+          <td style="color:${statusColor};font-weight:600;">${rec.status}</td>
+          <td>${rec.sentAt ? new Date(rec.sentAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-'}</td>
+          <td style="font-weight:600;color:var(--info);">${rec.opens || 0}</td>
+          <td style="font-weight:600;color:var(--accent);">${rec.clicks || 0}</td>
+          <td style="font-size:11px;color:var(--danger-dark);">${rec.error || '-'}</td>
+        </tr>
+      `;
+    });
+
+    const modalHTML = `
+      <h4 style="font-size:16px;font-weight:700;margin-bottom:16px;">Campaign: ${campaign.name}</h4>
+      
+      <div style="background:var(--bg);padding:14px;border-radius:6px;margin-bottom:16px;">
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px;">Subject</div>
+        <div style="font-size:14px;font-weight:600;color:var(--text);">${campaign.subject}</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;">
+        <div style="background:var(--success-light);padding:12px;border-radius:6px;text-align:center;">
+          <div style="font-size:24px;font-weight:800;color:var(--success-dark);">${campaign.sentCount || 0}</div>
+          <div style="font-size:11px;color:var(--success-dark);text-transform:uppercase;">Sent</div>
+        </div>
+        <div style="background:var(--info-light);padding:12px;border-radius:6px;text-align:center;">
+          <div style="font-size:24px;font-weight:800;color:#0e7490;">${campaign.openedCount || 0}</div>
+          <div style="font-size:11px;color:#0e7490;text-transform:uppercase;">Opened</div>
+        </div>
+        <div style="background:var(--accent-light);padding:12px;border-radius:6px;text-align:center;">
+          <div style="font-size:24px;font-weight:800;color:var(--accent);">${campaign.clickedCount || 0}</div>
+          <div style="font-size:11px;color:var(--accent);text-transform:uppercase;">Clicked</div>
+        </div>
+      </div>
+
+      <h5 style="font-size:14px;font-weight:700;margin-bottom:12px;">Recipients (${campaign.recipients.length})</h5>
+      <div style="max-height:400px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;">
+        <table style="width:100%;font-size:12px;">
+          <thead style="position:sticky;top:0;background:var(--primary-light);">
+            <tr>
+              <th style="padding:10px;color:#e2e8f0;text-align:left;">#</th>
+              <th style="padding:10px;color:#e2e8f0;text-align:left;">Email</th>
+              <th style="padding:10px;color:#e2e8f0;text-align:left;">Status</th>
+              <th style="padding:10px;color:#e2e8f0;text-align:left;">Sent At</th>
+              <th style="padding:10px;color:#e2e8f0;text-align:center;">Opens</th>
+              <th style="padding:10px;color:#e2e8f0;text-align:center;">Clicks</th>
+              <th style="padding:10px;color:#e2e8f0;text-align:left;">Error</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${recipientRows}
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    document.getElementById('modalTitle').textContent = 'Campaign Details';
+    document.getElementById('modalBody').innerHTML = modalHTML;
+    document.getElementById('modalOverlay').classList.add('show');
+    
+  } catch(err) {
+    alert('Failed to load campaign: ' + err.message);
+  } finally {
+    hideLoading();
+  }
+}
+
+async function deleteSMTPCampaign(campaignId, campaignName){
+  if(!confirm(`Delete campaign "${campaignName}"?\n\nThis will permanently delete all tracking data for this campaign.`)){
+    return;
+  }
+
+  showLoading('Deleting campaign...');
+  
+  try {
+    const r = await authFetch('/api/smtp/campaign/' + campaignId, {
+      method: 'DELETE'
+    });
+    const d = await r.json();
+    
+    if(!r.ok){
+      throw new Error(d.error || 'Delete failed');
+    }
+
+    loadSMTPCampaigns();
+  } catch(err) {
+    alert('Failed to delete campaign: ' + err.message);
+  } finally {
+    hideLoading();
+  }
 }
 </script>
 </body>
