@@ -1178,6 +1178,102 @@ app.get('/api/compare/export', auth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+function buildDayList(startMonth, startDay, endMonth, endDay) {
+  const s = new Date(Date.UTC(2000, startMonth - 1, startDay));
+  const e = new Date(Date.UTC(2000, endMonth - 1, endDay));
+  if (isNaN(s.getTime()) || isNaN(e.getTime()) || e < s) return null;
+  const days = [];
+  for (let d = new Date(s); d <= e; d.setUTCDate(d.getUTCDate() + 1)) {
+    days.push({ month: d.getUTCMonth() + 1, day: d.getUTCDate() });
+  }
+  return days;
+}
+
+function makeUTCDate(year, month, day, endOfDay) {
+  const d = new Date(Date.UTC(year, month - 1, day, endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0));
+  if (d.getUTCFullYear() !== year || d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day) return null;
+  return d;
+}
+
+async function getAvailableYears() {
+  const fields = ['enquiryDateParsed', 'registrationDateParsed', 'admissionDateParsed'];
+  const yearSet = new Set();
+  for (const field of fields) {
+    const rows = await Student.aggregate([
+      { $match: { [field]: { $type: 'date' } } },
+      { $group: { _id: { $year: '$' + field } } },
+      { $sort: { _id: 1 } }
+    ]);
+    rows.forEach(r => { if (r && r._id) yearSet.add(r._id); });
+  }
+  return Array.from(yearSet).sort((a, b) => a - b);
+}
+
+app.get('/api/compare/daywise', auth, adminOnly, async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    if (!startDate || !endDate) return res.status(400).json({ error: 'startDate and endDate are required' });
+    const sp = startDate.split('-'), ep = endDate.split('-');
+    if (sp.length !== 3 || ep.length !== 3) return res.status(400).json({ error: 'Invalid date format' });
+    const sm = parseInt(sp[1], 10), sd = parseInt(sp[2], 10);
+    const em = parseInt(ep[1], 10), ed = parseInt(ep[2], 10);
+    if (!sm || !sd || !em || !ed) return res.status(400).json({ error: 'Invalid dates' });
+
+    const dayList = buildDayList(sm, sd, em, ed);
+    if (!dayList) return res.status(400).json({ error: 'End date must be on or after start date (same-year range)' });
+
+    const years = await getAvailableYears();
+    if (!years.length) return res.json({ years: [], rows: [] });
+
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const rows = dayList.map(d => ({
+      key: String(d.month).padStart(2, '0') + '-' + String(d.day).padStart(2, '0'),
+      label: String(d.day).padStart(2, '0') + ' ' + monthNames[d.month - 1],
+      years: {}
+    }));
+    const rowMap = new Map(rows.map(r => [r.key, r]));
+
+    const skippedYears = [];
+    for (const year of years) {
+      const start = makeUTCDate(year, sm, sd, false);
+      const end = makeUTCDate(year, em, ed, true);
+      if (!start || !end || end < start) { skippedYears.push(year); continue; }
+
+      const extra = {};
+      const [enqAgg, regAgg, admAgg] = await Promise.all([
+        Student.aggregate([
+          { $match: buildDateFilter('enquiryDateParsed', start, end, extra) },
+          { $group: { _id: { m: { $month: '$enquiryDateParsed' }, d: { $dayOfMonth: '$enquiryDateParsed' } }, count: { $sum: 1 } } }
+        ]),
+        Student.aggregate([
+          { $match: buildDateFilter('registrationDateParsed', start, end, extra) },
+          { $group: { _id: { m: { $month: '$registrationDateParsed' }, d: { $dayOfMonth: '$registrationDateParsed' } }, count: { $sum: 1 } } }
+        ]),
+        Student.aggregate([
+          { $match: buildDateFilter('admissionDateParsed', start, end, extra) },
+          { $group: { _id: { m: { $month: '$admissionDateParsed' }, d: { $dayOfMonth: '$admissionDateParsed' } }, count: { $sum: 1 } } }
+        ])
+      ]);
+
+      const enqMap = new Map(enqAgg.map(r => [String(r._id.m).padStart(2, '0') + '-' + String(r._id.d).padStart(2, '0'), r.count]));
+      const regMap = new Map(regAgg.map(r => [String(r._id.m).padStart(2, '0') + '-' + String(r._id.d).padStart(2, '0'), r.count]));
+      const admMap = new Map(admAgg.map(r => [String(r._id.m).padStart(2, '0') + '-' + String(r._id.d).padStart(2, '0'), r.count]));
+
+      for (const day of dayList) {
+        const key = String(day.month).padStart(2, '0') + '-' + String(day.day).padStart(2, '0');
+        const row = rowMap.get(key);
+        if (!row) continue;
+        const enquiry = enqMap.get(key) || 0;
+        const registration = regMap.get(key) || 0;
+        const admission = admMap.get(key) || 0;
+        row.years[String(year)] = { enquiry, registration, admission, total: enquiry + registration + admission };
+      }
+    }
+
+    res.json({ years, rows, skippedYears });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.post('/api/migrate-campus', auth, adminOnly, async (req, res) => {
   try {
     const students = await Student.find({}, { campus: 1, enquiredCenter: 1, registeredCenter: 1, admittedCenter: 1 }).lean();

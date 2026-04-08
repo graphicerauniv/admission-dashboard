@@ -546,6 +546,22 @@ tbody tr{transition:background .1s;}
     </div>
   </div>
 
+  <div class="section-card admin-only" id="daywiseCompareSection" style="display:none;">
+    <div class="section-header">
+      <div class="section-title"><span class="icon" style="background:var(--accent-light);color:var(--accent);">📅</span>Day-wise Year Comparison</div>
+    </div>
+    <div class="section-body">
+      <div class="controls no-print">
+        <label>Start Date</label>
+        <input type="date" id="daywiseStartDate">
+        <label>End Date</label>
+        <input type="date" id="daywiseEndDate">
+        <button class="btn-purple" onclick="downloadDaywiseComparisonExcel()">⬇ Download Day-wise Comparison</button>
+      </div>
+      <p style="font-size:12px;color:var(--text-muted);margin-top:8px;">Exports a day-wise comparison across all available years.</p>
+    </div>
+  </div>
+
   <!-- Meritto Integration -->
   <div class="section-card admin-only" id="merittoSection" style="display:none;">
     <div class="section-header">
@@ -2044,6 +2060,48 @@ async function downloadComparisonExcel(){
     }
     addDetailSheets(d.year1,String(d.year1.year)); addDetailSheets(d.year2,String(d.year2.year)); addDetailSheets(d.year3,String(d.year3.year));
     XLSX.writeFile(wb,'GEU_Comparison_'+d.year1.year+'_'+d.year2.year+'_'+d.year3.year+'.xlsx');
+  }catch(e){ alert('Export failed: '+e.message); }
+  finally{ hideLoading(); }
+}
+
+async function downloadDaywiseComparisonExcel(){
+  const sd=document.getElementById('daywiseStartDate').value;
+  const ed=document.getElementById('daywiseEndDate').value;
+  if(!sd||!ed){alert('Please select both Start Date and End Date.');return;}
+  showLoading('Generating day-wise comparison...');
+  try{
+    const r=await authFetch('/api/compare/daywise?'+new URLSearchParams({ startDate: sd, endDate: ed }).toString());
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Export failed');
+    if(!d.years || d.years.length===0){ alert('No data found for the selected range.'); return; }
+
+    const years=d.years.map(y=>String(y));
+    const rows=d.rows||[];
+    const wb=XLSX.utils.book_new();
+    const metrics=[
+      { key:'enquiry', label:'Enquiries' },
+      { key:'registration', label:'Registrations' },
+      { key:'admission', label:'Admissions' },
+      { key:'total', label:'Total' }
+    ];
+
+    metrics.forEach(m=>{
+      const header=['Date', ...years];
+      const dataRows=rows.map(row=>{
+        const cells=years.map(y=>(row.years && row.years[y]) ? row.years[y][m.key] : 0);
+        return [row.label || row.key, ...cells];
+      });
+      const ws=XLSX.utils.aoa_to_sheet([header, ...dataRows]);
+      ws['!cols']=header.map((_,i)=>({ wch: i===0 ? 12 : 10 }));
+      XLSX.utils.book_append_sheet(wb, ws, m.label.substring(0,31));
+    });
+
+    const safeStart=sd.replace(/-/g,'');
+    const safeEnd=ed.replace(/-/g,'');
+    XLSX.writeFile(wb,'GEU_Daywise_Comparison_'+safeStart+'_to_'+safeEnd+'.xlsx');
+    if(d.skippedYears && d.skippedYears.length){
+      alert('Note: Skipped years without the selected dates: '+d.skippedYears.join(', '));
+    }
   }catch(e){ alert('Export failed: '+e.message); }
   finally{ hideLoading(); }
 }
