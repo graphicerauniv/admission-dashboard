@@ -556,9 +556,21 @@ tbody tr{transition:background .1s;}
         <input type="date" id="daywiseStartDate">
         <label>End Date</label>
         <input type="date" id="daywiseEndDate">
-        <button class="btn-purple" onclick="downloadDaywiseComparisonExcel()">⬇ Download Day-wise Comparison</button>
+        <label>Report</label>
+        <select id="daywiseMetric">
+          <option value="registration" selected>Registrations</option>
+          <option value="admission">Admissions</option>
+        </select>
+        <button class="btn-outline" onclick="previewDaywiseReport()">👀 Preview</button>
+        <button class="btn-purple" onclick="downloadDaywiseComparisonExcel()">⬇ Download</button>
       </div>
-      <p style="font-size:12px;color:var(--text-muted);margin-top:8px;">Exports a day-wise comparison across all available years.</p>
+      <div style="margin-top:10px;font-size:12px;color:var(--text-muted);">Years shown: 2024, 2025, 2026</div>
+      <div id="daywisePreviewWrap" style="margin-top:12px;display:none;">
+        <div style="font-size:12px;font-weight:700;color:var(--text-secondary);margin-bottom:6px;">Preview</div>
+        <div class="table-wrap" style="max-height:320px;">
+          <table id="daywisePreviewTable"></table>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -2065,12 +2077,11 @@ async function downloadComparisonExcel(){
 }
 
 async function downloadDaywiseComparisonExcel(){
-  const sd=document.getElementById('daywiseStartDate').value;
-  const ed=document.getElementById('daywiseEndDate').value;
-  if(!sd||!ed){alert('Please select both Start Date and End Date.');return;}
-  showLoading('Generating day-wise comparison...');
+  const p=getDaywiseParams();
+  if(!p) return;
+  showLoading('Generating day-wise report...');
   try{
-    const r=await authFetch('/api/compare/daywise?'+new URLSearchParams({ startDate: sd, endDate: ed }).toString());
+    const r=await authFetch('/api/compare/daywise?'+new URLSearchParams(p).toString());
     const d=await r.json();
     if(!r.ok) throw new Error(d.error||'Export failed');
     if(!d.years || d.years.length===0){ alert('No data found for the selected range.'); return; }
@@ -2078,31 +2089,63 @@ async function downloadDaywiseComparisonExcel(){
     const years=d.years.map(y=>String(y));
     const rows=d.rows||[];
     const wb=XLSX.utils.book_new();
-    const metrics=[
-      { key:'enquiry', label:'Enquiries' },
-      { key:'registration', label:'Registrations' },
-      { key:'admission', label:'Admissions' },
-      { key:'total', label:'Total' }
-    ];
-
-    metrics.forEach(m=>{
-      const header=['Date', ...years];
-      const dataRows=rows.map(row=>{
-        const cells=years.map(y=>(row.years && row.years[y]) ? row.years[y][m.key] : 0);
-        return [row.label || row.key, ...cells];
-      });
-      const ws=XLSX.utils.aoa_to_sheet([header, ...dataRows]);
-      ws['!cols']=header.map((_,i)=>({ wch: i===0 ? 12 : 10 }));
-      XLSX.utils.book_append_sheet(wb, ws, m.label.substring(0,31));
+    const header=['Date', ...years];
+    const dataRows=rows.map(row=>{
+      const cells=years.map(y=>(row.years && row.years[y]) ? row.years[y][p.metric] : 0);
+      return [row.label || row.key, ...cells];
     });
+    const ws=XLSX.utils.aoa_to_sheet([header, ...dataRows]);
+    ws['!cols']=header.map((_,i)=>({ wch: i===0 ? 12 : 10 }));
+    const sheetName = p.metric === 'admission' ? 'Admissions' : 'Registrations';
+    XLSX.utils.book_append_sheet(wb, ws, sheetName.substring(0,31));
 
-    const safeStart=sd.replace(/-/g,'');
-    const safeEnd=ed.replace(/-/g,'');
-    XLSX.writeFile(wb,'GEU_Daywise_Comparison_'+safeStart+'_to_'+safeEnd+'.xlsx');
+    const safeStart=p.startDate.replace(/-/g,'');
+    const safeEnd=p.endDate.replace(/-/g,'');
+    XLSX.writeFile(wb,'GEU_Daywise_'+sheetName+'_'+safeStart+'_to_'+safeEnd+'.xlsx');
     if(d.skippedYears && d.skippedYears.length){
       alert('Note: Skipped years without the selected dates: '+d.skippedYears.join(', '));
     }
   }catch(e){ alert('Export failed: '+e.message); }
+  finally{ hideLoading(); }
+}
+
+function getDaywiseParams(){
+  const sd=document.getElementById('daywiseStartDate').value;
+  const ed=document.getElementById('daywiseEndDate').value;
+  const metric=document.getElementById('daywiseMetric').value;
+  if(!sd||!ed){alert('Please select both Start Date and End Date.');return null;}
+  return { startDate: sd, endDate: ed, metric, years: '2024,2025,2026' };
+}
+
+async function previewDaywiseReport(){
+  const p=getDaywiseParams();
+  if(!p) return;
+  showLoading('Loading preview...');
+  try{
+    const r=await authFetch('/api/compare/daywise?'+new URLSearchParams(p).toString());
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Preview failed');
+    const years=d.years.map(y=>String(y));
+    const rows=d.rows||[];
+    const header=['Date', ...years];
+    let html='<thead><tr>';
+    header.forEach(h=>{ html+='<th style="text-align:left;">'+h+'</th>'; });
+    html+='</tr></thead><tbody>';
+    rows.forEach(row=>{
+      html+='<tr><td style="font-weight:600;">'+(row.label||row.key)+'</td>';
+      years.forEach(y=>{
+        const v=(row.years && row.years[y]) ? row.years[y][p.metric] : 0;
+        html+='<td>'+v+'</td>';
+      });
+      html+='</tr>';
+    });
+    html+='</tbody>';
+    document.getElementById('daywisePreviewTable').innerHTML=html;
+    document.getElementById('daywisePreviewWrap').style.display='block';
+    if(d.skippedYears && d.skippedYears.length){
+      alert('Note: Skipped years without the selected dates: '+d.skippedYears.join(', '));
+    }
+  }catch(e){ alert('Preview failed: '+e.message); }
   finally{ hideLoading(); }
 }
 

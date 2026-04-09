@@ -1211,7 +1211,7 @@ async function getAvailableYears() {
 
 app.get('/api/compare/daywise', auth, adminOnly, async (req, res) => {
   try {
-    const { startDate, endDate } = req.query;
+    const { startDate, endDate, years, metric } = req.query;
     if (!startDate || !endDate) return res.status(400).json({ error: 'startDate and endDate are required' });
     const sp = startDate.split('-'), ep = endDate.split('-');
     if (sp.length !== 3 || ep.length !== 3) return res.status(400).json({ error: 'Invalid date format' });
@@ -1222,8 +1222,17 @@ app.get('/api/compare/daywise', auth, adminOnly, async (req, res) => {
     const dayList = buildDayList(sm, sd, em, ed);
     if (!dayList) return res.status(400).json({ error: 'End date must be on or after start date (same-year range)' });
 
-    const years = await getAvailableYears();
-    if (!years.length) return res.json({ years: [], rows: [] });
+    const allowedYears = [2024, 2025, 2026];
+    const yearList = (years || '')
+      .split(',')
+      .map(v => parseInt(String(v).trim(), 10))
+      .filter(v => allowedYears.includes(v));
+    const finalYears = yearList.length ? yearList : allowedYears.slice();
+    if (!finalYears.length) return res.status(400).json({ error: 'No valid years provided' });
+
+    const metricKey = (metric || '').toString().trim().toLowerCase();
+    const allowedMetrics = ['registration', 'admission', 'enquiry', 'total'];
+    const selectedMetric = allowedMetrics.includes(metricKey) ? metricKey : 'registration';
 
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const rows = dayList.map(d => ({
@@ -1234,26 +1243,38 @@ app.get('/api/compare/daywise', auth, adminOnly, async (req, res) => {
     const rowMap = new Map(rows.map(r => [r.key, r]));
 
     const skippedYears = [];
-    for (const year of years) {
+    for (const year of finalYears) {
       const start = makeUTCDate(year, sm, sd, false);
       const end = makeUTCDate(year, em, ed, true);
       if (!start || !end || end < start) { skippedYears.push(year); continue; }
 
       const extra = {};
-      const [enqAgg, regAgg, admAgg] = await Promise.all([
-        Student.aggregate([
+      const tasks = [];
+      if (selectedMetric === 'enquiry' || selectedMetric === 'total') {
+        tasks.push(Student.aggregate([
           { $match: buildDateFilter('enquiryDateParsed', start, end, extra) },
           { $group: { _id: { m: { $month: '$enquiryDateParsed' }, d: { $dayOfMonth: '$enquiryDateParsed' } }, count: { $sum: 1 } } }
-        ]),
-        Student.aggregate([
+        ]));
+      } else {
+        tasks.push(Promise.resolve([]));
+      }
+      if (selectedMetric === 'registration' || selectedMetric === 'total') {
+        tasks.push(Student.aggregate([
           { $match: buildDateFilter('registrationDateParsed', start, end, extra) },
           { $group: { _id: { m: { $month: '$registrationDateParsed' }, d: { $dayOfMonth: '$registrationDateParsed' } }, count: { $sum: 1 } } }
-        ]),
-        Student.aggregate([
+        ]));
+      } else {
+        tasks.push(Promise.resolve([]));
+      }
+      if (selectedMetric === 'admission' || selectedMetric === 'total') {
+        tasks.push(Student.aggregate([
           { $match: buildDateFilter('admissionDateParsed', start, end, extra) },
           { $group: { _id: { m: { $month: '$admissionDateParsed' }, d: { $dayOfMonth: '$admissionDateParsed' } }, count: { $sum: 1 } } }
-        ])
-      ]);
+        ]));
+      } else {
+        tasks.push(Promise.resolve([]));
+      }
+      const [enqAgg, regAgg, admAgg] = await Promise.all(tasks);
 
       const enqMap = new Map(enqAgg.map(r => [String(r._id.m).padStart(2, '0') + '-' + String(r._id.d).padStart(2, '0'), r.count]));
       const regMap = new Map(regAgg.map(r => [String(r._id.m).padStart(2, '0') + '-' + String(r._id.d).padStart(2, '0'), r.count]));
@@ -1270,7 +1291,7 @@ app.get('/api/compare/daywise', auth, adminOnly, async (req, res) => {
       }
     }
 
-    res.json({ years, rows, skippedYears });
+    res.json({ years: finalYears, rows, skippedYears, metric: selectedMetric });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
