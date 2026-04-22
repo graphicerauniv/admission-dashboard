@@ -589,7 +589,6 @@ async function buildReport(years, campuses, mode) {
 // ─── Helper: build HTML email ───
 function buildEmailHTML(years, campuses, results) {
   const today = new Date();
-  const timeStr = today.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
   const dateStr = today.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' });
 
   const campusLabel = c => ({
@@ -597,32 +596,25 @@ function buildEmailHTML(years, campuses, results) {
     'GEHUHLD': 'GEHU-HLD', 'GEHUBTL': 'GEHU-BTL'
   }[c] || c);
 
-  const yearBg = ['#1e3a5f', '#3b1f6e', '#1a4731'];
-  const yearFg = ['#93c5fd', '#c4b5fd', '#6ee7b7'];
-
-  const hasSingleGehu = campuses.includes('GEHU') && !campuses.some(c => c.startsWith('GEHU') && c !== 'GEHU');
   const showCampuses = campuses;
 
   function yearTotal(year, type) {
-    return showCampuses.reduce((sum, c) => sum + (results[year]?.[c]?.[type] || 0), 0);
+    return showCampuses.reduce((sum, campus) => sum + (results[year]?.[campus]?.[type] || 0), 0);
   }
 
-  const colsPerYear = showCampuses.length + 1;
-  const totalCols = 1 + years.length * colsPerYear;
+  const campusSummary = showCampuses.map(campusLabel).join(' and ');
 
   let headerRow1 = `<th style="padding:12px 16px;background:#0f172a;color:#e2e8f0;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;border:1px solid #334155;text-align:left;">Status</th>`;
-  years.forEach((y, i) => {
-    const bg = yearBg[i % yearBg.length];
-    headerRow1 += `<th colspan="${colsPerYear}" style="padding:12px 16px;background:${bg};color:white;font-size:13px;font-weight:800;text-align:center;border:1px solid #334155;letter-spacing:0.5px;">${y}</th>`;
+  showCampuses.forEach((campus, i) => {
+    const bg = i % 2 === 0 ? '#1e3a5f' : '#1a4731';
+    headerRow1 += `<th colspan="${years.length}" style="padding:12px 16px;background:${bg};color:white;font-size:13px;font-weight:800;text-align:center;border:1px solid #334155;letter-spacing:0.5px;">${campusLabel(campus)}</th>`;
   });
 
   let headerRow2 = `<th style="padding:9px 16px;background:#1e293b;color:#94a3b8;font-size:11px;font-weight:700;border:1px solid #334155;"></th>`;
-  years.forEach((y, i) => {
-    const bg = yearBg[i % yearBg.length] + 'bb';
-    showCampuses.forEach(c => {
-      headerRow2 += `<th style="padding:9px 10px;background:#1e293b;color:#94a3b8;font-size:11px;font-weight:700;text-align:center;border:1px solid #334155;text-transform:uppercase;letter-spacing:0.4px;">${campusLabel(c)}</th>`;
+  showCampuses.forEach(() => {
+    years.forEach(y => {
+      headerRow2 += `<th style="padding:9px 10px;background:#1e293b;color:#e2e8f0;font-size:11px;font-weight:700;text-align:center;border:1px solid #334155;text-transform:uppercase;letter-spacing:0.4px;">${y}</th>`;
     });
-    headerRow2 += `<th style="padding:9px 10px;background:#162032;color:#e2e8f0;font-size:11px;font-weight:800;text-align:center;border:1px solid #334155;text-transform:uppercase;letter-spacing:0.4px;">Total</th>`;
   });
 
   const rows = [
@@ -635,13 +627,11 @@ function buildEmailHTML(years, campuses, results) {
     const rowBg = rowIdx % 2 === 0 ? '#ffffff' : '#f8fafc';
     let tds = `<td style="padding:14px 16px;font-weight:700;font-size:13px;color:#0f172a;background:${rowBg};border:1px solid #e2e8f0;">${row.label}</td>`;
 
-    years.forEach((y, yi) => {
-      const total = yearTotal(y, row.type);
-      showCampuses.forEach(c => {
-        const val = results[y]?.[c]?.[row.type] || 0;
+    showCampuses.forEach(campus => {
+      years.forEach(y => {
+        const val = results[y]?.[campus]?.[row.type] || 0;
         tds += `<td style="padding:14px 10px;text-align:center;font-size:13px;font-weight:${val > 0 ? '700' : '400'};color:${val > 0 ? row.color : '#94a3b8'};background:${rowBg};border:1px solid #e2e8f0;">${val > 0 ? val : '-'}</td>`;
       });
-      tds += `<td style="padding:14px 10px;text-align:center;font-size:14px;font-weight:800;color:${row.color};background:#f0fdf4;border:1px solid #e2e8f0;">${total}</td>`;
     });
 
     dataRows += `<tr>${tds}</tr>`;
@@ -653,25 +643,31 @@ function buildEmailHTML(years, campuses, results) {
     { label: 'Admitted', type: 'adm' }
   ];
 
-  function buildYoYBlock(y1, y2) {
+  function buildCampusYoYBlock(campus) {
     return `
     <div style="padding:16px 20px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;width:100%;">
-      <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Year-over-Year Change (${y1} vs ${y2})</div>
+      <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;">${campusLabel(campus)} Comparison</div>
       ${metrics.map(m => {
-        const v1 = yearTotal(y1, m.type);
-        const v2 = yearTotal(y2, m.type);
-        const diff = v1 - v2;
-        const pct = v2 > 0 ? ((diff / v2) * 100).toFixed(1) : '—';
-        const color = diff > 0 ? '#15803d' : diff < 0 ? '#b91c1c' : '#64748b';
-        const sign = diff > 0 ? '+' : '';
-        return `<div style="font-size:13px;font-weight:600;color:#1e293b;margin-bottom:4px;">${m.label}: <span style="color:${color};font-weight:700;">${sign}${diff} (${sign}${pct}%)</span></div>`;
+        const comparisons = [];
+        for (let i = 0; i < years.length - 1; i += 1) {
+          const currentYear = years[i];
+          const previousYear = years[i + 1];
+          const v1 = results[currentYear]?.[campus]?.[m.type] || 0;
+          const v2 = results[previousYear]?.[campus]?.[m.type] || 0;
+          const diff = v1 - v2;
+          const pct = v2 > 0 ? `${((diff / v2) * 100).toFixed(1)}%` : '—';
+          const color = diff > 0 ? '#15803d' : diff < 0 ? '#b91c1c' : '#64748b';
+          const sign = diff > 0 ? '+' : '';
+          comparisons.push(
+            `<div style="font-size:12px;font-weight:600;color:#334155;margin-top:4px;">${currentYear} vs ${previousYear}: <span style="color:${color};font-weight:700;">${sign}${diff} (${sign}${pct})</span></div>`
+          );
+        }
+        return `<div style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:10px;">${m.label}${comparisons.join('')}</div>`;
       }).join('')}
     </div>`;
   }
 
-  const yoyBlocks = [];
-  if (years.length >= 2) yoyBlocks.push(buildYoYBlock(years[0], years[1]));
-  if (years.length >= 3) yoyBlocks.push(buildYoYBlock(years[0], years[2]));
+  const yoyBlocks = showCampuses.map(buildCampusYoYBlock);
 
   if (yoyBlocks.length === 1) {
     yoyHTML = `<div style="margin-top:20px;">${yoyBlocks[0]}</div>`;
@@ -693,13 +689,13 @@ function buildEmailHTML(years, campuses, results) {
 
   <p style="font-size:14px;color:#1e293b;margin-bottom:16px;font-weight:500;">
     Hon'ble Sir,<br><br>
-    Kindly find the admission data for both <strong>GEU</strong> and <strong>GEHU</strong>
+    Kindly find the admission data for <strong>${campusSummary}</strong>
     at <strong>5:30 pm</strong> till <strong>${dateStr}</strong>.
   </p>
 
   <div style=";border-radius:12px;padding:20px 24px;margin-bottom:16px;">
-    <div style="font-size:20px;font-weight:800;color:black;letter-spacing:-0.5px;">GRAPHIC Era Admissions Report</div>
-    <div style="font-size:12px;color:#94a3b8;margin-top:4px;">Period: 1 Jan → ${dateStr} &nbsp;·&nbsp; Years: ${years.join(' vs ')}</div>
+    <div style="font-size:20px;font-weight:800;color:black;letter-spacing:-0.5px;">Graphic Era Admissions Report</div>
+    <div style="font-size:12px;color:#94a3b8;margin-top:4px;">Period: 1 Jan → ${dateStr} &nbsp;·&nbsp; Years: ${years.join(' vs ')} &nbsp;·&nbsp; Campus-first comparison</div>
   </div>
 
   <div style="background:white;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
