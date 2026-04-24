@@ -148,6 +148,11 @@
     color: var(--light);
     margin-top: 2px;
   }
+  .field-row .helper-text {
+    font-size: .72rem;
+    color: var(--light);
+    line-height: 1.35;
+  }
 
   /* ── PREVIEW PANE ── */
   .preview-pane {
@@ -169,7 +174,7 @@
 
   /* ── THE LETTER ── */
   /* THE LETTER */
-.letter-wrap {
+  .letter-wrap {
   width: 794px;              /* keep A4 width */
   max-width: 100%;
 
@@ -186,6 +191,8 @@
   page-break-inside: avoid;
   break-inside: avoid;
 }
+
+  .hidden { display: none !important; }
 
   /* GEU Header — matches real letterhead */
   .letter-header {
@@ -399,11 +406,24 @@
     font-style: italic;
   }
 
+  .hill-header,
+  .hill-footer {
+    margin: 0;
+    padding: 0;
+    line-height: 0;
+  }
+  .hill-header img,
+  .hill-footer img {
+    width: 100%;
+    display: block;
+  }
+
   /* ── PRINT STYLES ── */
   @page { size: A4 portrait; margin: 0; }
   @media print {
     body { background: #fff !important; }
     .topbar, .editor-panel, .preview-label { display: none !important; }
+    .hidden { display: none !important; }
     .workspace { display: block !important; }
     .preview-pane { background: #fff !important; padding: 0 !important; align-items: stretch !important; }
 
@@ -443,7 +463,7 @@
 <div class="topbar">
   <div class="topbar-title">
     <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><path stroke="#fff" stroke-width="2" d="M9 12h6M9 16h4M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg>
-    GEU Offer Letter Editor
+    <span id="editorTitle">GEU Offer Letter Editor</span>
   </div>
   <div class="topbar-actions">
     <button class="btn btn-ghost" onclick="resetForm()">
@@ -462,6 +482,21 @@
 
   <!-- EDITOR PANEL -->
   <div class="editor-panel">
+    <div class="section-label">📝 Letter Setup</div>
+    <div class="field-row">
+      <label>Letter Type</label>
+      <select id="f_lettertype">
+        <option value="standard">Offer Letter</option>
+        <option value="hill">Hill Offer Letter</option>
+      </select>
+    </div>
+    <div class="field-row">
+      <label>University Name</label>
+      <input type="text" id="f_university" placeholder="e.g. Graphic Era Hill University" />
+      <div class="helper-text">This name will be used in the admission paragraph and signature block. Hill offer letter defaults to Graphic Era Hill University.</div>
+    </div>
+
+    <div class="divider"></div>
     <div class="section-label">📅 Date & Reference</div>
     <div class="field-row">
       <label>Date</label>
@@ -534,8 +569,13 @@
     <div class="preview-label">Live Preview — What you see is what prints</div>
     <div class="letter-wrap" id="letter">
 
-      <!-- HEADER — real GEU image -->
-      <img src="image/image.png" alt="GEU Header" style="width:100%;display:block;"/>
+      <!-- STANDARD HEADER -->
+      <img id="standardHeader" src="image/image.png" alt="GEU Header" style="width:100%;display:block;"/>
+
+      <!-- HILL HEADER -->
+      <div id="hillHeader" class="hill-header hidden">
+        <img src="image/image1.png" alt="Hill University Header" />
+      </div>
 
       <!-- BODY -->
       <div class="letter-body">
@@ -557,7 +597,7 @@
         <p class="letter-para letter-dear">Dear <span id="o_name2">Student Name</span>,</p>
 
         <p class="letter-para">
-          We are pleased to offer you provisional admission to <strong>Graphic Era Deemed to be University, Dehradun</strong>, for the academic session <strong><span id="o_session">2026-2027</span></strong> in the following program:
+          We are pleased to offer you provisional admission to <strong><span id="o_university">Graphic Era Deemed to be University, Dehradun</span></strong>, for the academic session <strong><span id="o_session">2026-2027</span></strong> in the following program:
         </p>
         <ul class="letter-list">
           <li><span class="bullet-label">Program:</span> <span id="o_program">Bachelor of Technology (Computer Science &amp; Engineering)</span></li>
@@ -603,16 +643,21 @@
           <p style="margin-top:6px;">Warm regards,</p>
           <div class="letter-sign">
             <strong>Admissions Office</strong><br/>
-            Graphic Era Deemed to be University<br/>
-            Dehradun, Uttarakhand
+            <span id="o_university_sign">Graphic Era Deemed to be University, Dehradun</span><br/>
+            <span id="o_university_location">Dehradun, Uttarakhand</span>
           </div>
         </div>
               <div class="letter-note">Note: This is a system-generated offer letter and does not require a physical signature.</div>
       </div><!-- /letter-body -->
 
-      <!-- FOOTER — full width -->
-      <div class="footer-next-page">
+      <!-- STANDARD FOOTER -->
+      <div id="standardFooter" class="footer-next-page">
         <img src="image/imgcopy.png" alt="GEU Footer" />
+      </div>
+
+      <!-- HILL FOOTER -->
+      <div id="hillFooter" class="hill-footer hidden">
+        <img src="image/imagecopy1.png" alt="Hill University Footer" />
       </div>
 
     </div><!-- /letter-wrap -->
@@ -637,7 +682,40 @@
     if (el) el.textContent = (val && val.length > 0) ? val : (fallback || '');
   }
 
+  function getUniversityDefaults(letterType) {
+    if (letterType === 'hill') {
+      return {
+        name: 'Graphic Era Hill University',
+        location: 'Dehradun, Uttarakhand',
+        editorTitle: 'Hill Offer Letter Editor'
+      };
+    }
+    return {
+      name: 'Graphic Era Deemed to be University, Dehradun',
+      location: 'Dehradun, Uttarakhand',
+      editorTitle: 'GEU Offer Letter Editor'
+    };
+  }
+
+  function applyLetterTypeVisuals(letterType, session, university) {
+    var isHill = letterType === 'hill';
+    var standardHeader = document.getElementById('standardHeader');
+    var standardFooter = document.getElementById('standardFooter');
+    var hillHeader = document.getElementById('hillHeader');
+    var hillFooter = document.getElementById('hillFooter');
+    var editorTitle = document.getElementById('editorTitle');
+
+    if (standardHeader) standardHeader.classList.toggle('hidden', isHill);
+    if (standardFooter) standardFooter.classList.toggle('hidden', isHill);
+    if (hillHeader) hillHeader.classList.toggle('hidden', !isHill);
+    if (hillFooter) hillFooter.classList.toggle('hidden', !isHill);
+    if (editorTitle) editorTitle.textContent = getUniversityDefaults(letterType).editorTitle;
+
+  }
+
   function update() {
+    var letterType = getVal('f_lettertype') || 'standard';
+    var defaults = getUniversityDefaults(letterType);
     var date    = getVal('f_date');
     var admno   = getVal('f_admno');
     var name    = getVal('f_name');
@@ -648,6 +726,7 @@
     var program = getVal('f_program');
     var dept    = getVal('f_dept');
     var session = getVal('f_session');
+    var university = getVal('f_university');
     var fee     = getVal('f_fee');
     var feedue  = getVal('f_feedue');
     var report  = getVal('f_report');
@@ -663,30 +742,44 @@
     setVal('o_program', program, 'Bachelor of Technology (Computer Science & Engineering)');
     setVal('o_dept',    dept,    'Computer Science & Engineering');
     setVal('o_session', session, '2026-2027');
+    setVal('o_university', university, defaults.name);
+    setVal('o_university_sign', university, defaults.name);
+    setVal('o_university_location', '', defaults.location);
     setVal('o_fee',     fee,     '85,000.00');
     setVal('o_feedue',  feedue  ? fmtDate(feedue) : '', '30/04/2026');
     setVal('o_report',  report  ? fmtDate(report) : '', '15/07/2026');
+    applyLetterTypeVisuals(letterType, session, university);
+  }
+
+  function applyLetterDefaults(letterType) {
+    var universityInput = document.getElementById('f_university');
+    var defaults = getUniversityDefaults(letterType);
+    if (universityInput && !universityInput.value.trim()) {
+      universityInput.value = defaults.name;
+    }
   }
 
   function resetForm() {
     var ids = ['f_date','f_admno','f_name','f_father','f_addr','f_city','f_state',
-               'f_program','f_dept','f_session','f_fee','f_feedue','f_report'];
+               'f_program','f_dept','f_session','f_university','f_fee','f_feedue','f_report'];
     ids.forEach(function(id) {
       var el = document.getElementById(id);
       if (el) el.value = '';
     });
+    document.getElementById('f_lettertype').value = 'standard';
     // Restore defaults
     document.getElementById('f_program').value = 'Bachelor of Technology (Computer Science & Engineering)';
     document.getElementById('f_dept').value    = 'Computer Science & Engineering';
     document.getElementById('f_session').value = '2026-2027';
     document.getElementById('f_fee').value     = '85,000.00';
+    document.getElementById('f_university').value = getUniversityDefaults('standard').name;
     update();
   }
 
   // Attach listeners on DOMContentLoaded
   document.addEventListener('DOMContentLoaded', function() {
-    var ids = ['f_date','f_admno','f_name','f_father','f_addr','f_city','f_state',
-               'f_program','f_dept','f_session','f_fee','f_feedue','f_report'];
+    var ids = ['f_lettertype','f_date','f_admno','f_name','f_father','f_addr','f_city','f_state',
+               'f_program','f_dept','f_session','f_university','f_fee','f_feedue','f_report'];
     ids.forEach(function(id) {
       var el = document.getElementById(id);
       if (el) {
@@ -695,11 +788,18 @@
       }
     });
 
+    document.getElementById('f_lettertype').addEventListener('change', function(e) {
+      document.getElementById('f_university').value = getUniversityDefaults(e.target.value).name;
+      update();
+    });
+
     // Set defaults
+    document.getElementById('f_lettertype').value = 'standard';
     document.getElementById('f_program').value = 'Bachelor of Technology (Computer Science & Engineering)';
     document.getElementById('f_dept').value    = 'Computer Science & Engineering';
     document.getElementById('f_session').value = '2026-2027';
     document.getElementById('f_fee').value     = '85,000.00';
+    document.getElementById('f_university').value = getUniversityDefaults('standard').name;
     update();
   });
 </script>
