@@ -5,6 +5,7 @@ const multer = require('multer');
 const csvParser = require('csv-parser');
 const { Readable } = require('stream');
 const path = require('path');
+const fs = require('fs');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
@@ -15,6 +16,11 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+
+const photographyPublicDir = path.join(__dirname, 'photography', 'public');
+const photographyUploadsDir = path.join(__dirname, 'photography', 'uploads');
+fs.mkdirSync(photographyUploadsDir, { recursive: true });
+app.use('/photography', express.static(photographyPublicDir));
 
 const JWT_SECRET = process.env.JWT_SECRET || 'default-secret-change-me';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@geu.ac.in';
@@ -31,7 +37,7 @@ const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
   password: { type: String, required: true },
   name: { type: String, default: '' },
-  role: { type: String, enum: ['user', 'admin'], default: 'user' },
+  role: { type: String, enum: ['user', 'admin', 'photography'], default: 'user' },
   active: { type: Boolean, default: true }
 }, { timestamps: true });
 userSchema.index({ email: 1 });
@@ -58,7 +64,50 @@ function adminOnly(req, res, next) {
   next();
 }
 
+function dashboardOnly(req, res, next) {
+  if (req.user.role === 'photography') {
+    return res.status(403).json({ error: 'Photography users can only access the photography folder.' });
+  }
+  next();
+}
+
+function photographyAccessOnly(req, res, next) {
+  if (!['admin', 'photography'].includes(req.user.role)) {
+    return res.status(403).json({ error: 'Photography access required' });
+  }
+  next();
+}
+
 const upload_mem = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+const photographyUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 512 * 1024 * 1024 }
+});
+
+function sanitizeFileBaseName(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'file';
+}
+
+function formatBytes(value) {
+  if (!value) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const index = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
+  const size = value / 1024 ** index;
+  return `${size.toFixed(size >= 10 || index === 0 ? 0 : 1)} ${units[index]}`;
+}
+
+function derivePhotoKind(fileName, mimeType = '') {
+  if (mimeType.startsWith('image/')) return 'image';
+  if (mimeType.startsWith('video/')) return 'video';
+  const ext = path.extname(fileName).toLowerCase();
+  if (['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'].includes(ext)) return 'image';
+  if (['.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v'].includes(ext)) return 'video';
+  return 'file';
+}
 
 // ─── Login ───
 app.post('/api/login', async (req, res) => {
@@ -73,8 +122,8 @@ app.post('/api/login', async (req, res) => {
     const user = await User.findOne({ email: emailLower, active: true });
     if (!user) return res.status(401).json({ error: 'Invalid email or password' });
     if (user.password !== hashPass(password)) return res.status(401).json({ error: 'Invalid email or password' });
-    const token = jwt.sign({ email: user.email, role: 'user', userId: user._id }, JWT_SECRET, { expiresIn: '24h' });
-    res.json({ token, role: 'user', name: user.name || user.email, email: user.email });
+    const token = jwt.sign({ email: user.email, role: user.role || 'user', userId: user._id }, JWT_SECRET, { expiresIn: '24h' });
+    res.json({ token, role: user.role || 'user', name: user.name || user.email, email: user.email });
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ error: 'Login failed' });
@@ -84,6 +133,7 @@ app.post('/api/login', async (req, res) => {
 app.post('/api/users/upload', auth, adminOnly, upload_mem.single('csvFile'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const requestedRole = req.body.role === 'photography' ? 'photography' : 'user';
     const users = [];
     await new Promise((resolve, reject) => {
       const stream = Readable.from(req.file.buffer.toString('utf-8'));
@@ -92,7 +142,9 @@ app.post('/api/users/upload', auth, adminOnly, upload_mem.single('csvFile'), asy
           const email = (row['Email'] || row['email'] || row['Email ID'] || row['EmailID'] || '').trim().toLowerCase();
           const password = (row['Password'] || row['password'] || '').trim();
           const name = (row['Name'] || row['name'] || '').trim();
-          if (email && password) users.push({ email, password: hashPass(password), name, role: 'user', active: true });
+          const csvRole = (row['Role'] || row['role'] || '').trim().toLowerCase();
+          const role = csvRole === 'photography' ? 'photography' : requestedRole;
+          if (email && password) users.push({ email, password: hashPass(password), name, role, active: true });
         })
         .on('end', resolve).on('error', reject);
     });
@@ -113,6 +165,119 @@ app.get('/api/users', auth, adminOnly, async (req, res) => {
     const users = await User.find({}, { password: 0 }).sort({ createdAt: -1 }).lean();
     res.json(users);
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/photography/session', auth, photographyAccessOnly, async (req, res) => {
+  try {
+    const user = req.user.userId ? await User.findById(req.user.userId, { password: 0 }).lean() : null;
+    res.json({
+      ok: true,
+      role: req.user.role,
+      email: req.user.email,
+      name: user?.name || req.user.email
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/photography/health', auth, photographyAccessOnly, async (_req, res) => {
+  try {
+    res.json({ ok: true, folder: photographyUploadsDir });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get('/api/photography/files', auth, photographyAccessOnly, async (_req, res) => {
+  try {
+    const entries = await fs.promises.readdir(photographyUploadsDir, { withFileTypes: true });
+    const files = await Promise.all(entries
+      .filter(entry => entry.isFile())
+      .map(async entry => {
+        const fullPath = path.join(photographyUploadsDir, entry.name);
+        const stats = await fs.promises.stat(fullPath);
+        return {
+          key: entry.name,
+          name: entry.name,
+          size: stats.size,
+          sizeLabel: formatBytes(stats.size),
+          lastModified: stats.mtime,
+          kind: derivePhotoKind(entry.name),
+          downloadUrl: `/api/photography/files/${encodeURIComponent(entry.name)}/download`
+        };
+      }));
+
+    files.sort((a, b) => new Date(b.lastModified) - new Date(a.lastModified));
+    const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
+    res.json({
+      files,
+      summary: {
+        totalFiles: files.length,
+        totalBytes,
+        totalSizeLabel: formatBytes(totalBytes)
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Unable to load photography files.', details: err.message });
+  }
+});
+
+app.get('/api/photography/files/:key/download', auth, photographyAccessOnly, async (req, res) => {
+  try {
+    const fileName = path.basename(req.params.key);
+    const filePath = path.join(photographyUploadsDir, fileName);
+    await fs.promises.access(filePath, fs.constants.R_OK);
+    res.download(filePath, fileName);
+  } catch (err) {
+    res.status(404).json({ message: 'File not found.' });
+  }
+});
+
+app.post('/api/photography/upload', auth, photographyAccessOnly, photographyUpload.array('files'), async (req, res) => {
+  const requestedNames = Array.isArray(req.body.names)
+    ? req.body.names
+    : req.body.names
+      ? [req.body.names]
+      : [];
+  const files = req.files ?? [];
+
+  if (!files.length) {
+    return res.status(400).json({ message: 'No files were uploaded.' });
+  }
+
+  try {
+    const uploaded = [];
+
+    for (const [index, file] of files.entries()) {
+      const extension = path.extname(file.originalname).toLowerCase();
+      const safeBase = sanitizeFileBaseName(requestedNames[index] || path.basename(file.originalname, extension));
+      const fileName = `${safeBase}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}${extension}`;
+      const targetPath = path.join(photographyUploadsDir, fileName);
+      await fs.promises.writeFile(targetPath, file.buffer);
+      uploaded.push({ key: fileName, name: fileName });
+    }
+
+    res.status(201).json({ message: 'Files uploaded successfully.', uploaded });
+  } catch (err) {
+    res.status(500).json({ message: 'Upload failed.', details: err.message });
+  }
+});
+
+app.delete('/api/photography/files', auth, photographyAccessOnly, async (req, res) => {
+  const { key } = req.body ?? {};
+  if (!key || typeof key !== 'string') {
+    return res.status(400).json({ message: 'A valid file key is required.' });
+  }
+
+  try {
+    const fileName = path.basename(key);
+    const filePath = path.join(photographyUploadsDir, fileName);
+    await fs.promises.unlink(filePath);
+    res.json({ message: 'File deleted successfully.' });
+  } catch (err) {
+    res.status(500).json({ message: 'Delete failed.', details: err.message });
+  }
 });
 
 app.delete('/api/users/:id', auth, adminOnly, async (req, res) => {
@@ -718,7 +883,7 @@ function buildEmailHTML(years, campuses, results) {
 }
 
 // ─── GET /api/report-preview ───
-app.get('/api/report-preview', auth, async (req, res) => {
+app.get('/api/report-preview', auth, dashboardOnly, async (req, res) => {
   try {
     const yearsParam = req.query.years;
     const campusParam = req.query.campuses;
@@ -977,7 +1142,7 @@ const mapDoc = (s, campusField, dateStrField) => ({
   dateStr: s[dateStrField] || ''
 });
 
-app.get('/api/students', auth, async (req, res) => {
+app.get('/api/students', auth, dashboardOnly, async (req, res) => {
   try {
     const { startDate, endDate, mode } = req.query;
     if (!startDate || !endDate) return res.status(400).json({ error: 'startDate and endDate required' });
@@ -1008,7 +1173,7 @@ app.get('/api/students', auth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.get('/api/students/page', auth, async (req, res) => {
+app.get('/api/students/page', auth, dashboardOnly, async (req, res) => {
   try {
     const { startDate, endDate, tab, page = 1, limit = 30, campus, course, year, search, mode } = req.query;
     if (!startDate || !endDate || !tab) return res.status(400).json({ error: 'startDate, endDate, tab required' });
@@ -1043,7 +1208,7 @@ app.get('/api/students/page', auth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.get('/api/students/export', auth, async (req, res) => {
+app.get('/api/students/export', auth, dashboardOnly, async (req, res) => {
   try {
     const { startDate, endDate, tab, campus, course, year, search, mode } = req.query;
     if (!startDate || !endDate || !tab) return res.status(400).json({ error: 'startDate, endDate, tab required' });
@@ -1075,7 +1240,7 @@ app.get('/api/students/export', auth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.get('/api/student/:id', auth, async (req, res) => {
+app.get('/api/student/:id', auth, dashboardOnly, async (req, res) => {
   try {
     const s = await Student.findById(req.params.id).lean();
     if (!s) return res.status(404).json({ error: 'Student not found' });
@@ -1099,7 +1264,7 @@ app.delete('/api/batch/:batchId', auth, adminOnly, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.get('/api/count', auth, async (req, res) => {
+app.get('/api/count', auth, dashboardOnly, async (req, res) => {
   try {
     const { mode } = req.query;
     const count = await Student.countDocuments(mode ? modeCourseQuery(mode) : {});
@@ -1108,7 +1273,7 @@ app.get('/api/count', auth, async (req, res) => {
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.get('/api/compare', auth, async (req, res) => {
+app.get('/api/compare', auth, dashboardOnly, async (req, res) => {
   try {
     const { startMonth, startDay, endMonth, endDay, year1, year2, year3, campus, course, mode } = req.query;
     if (!startMonth || !startDay || !endMonth || !endDay || !year1 || !year2 || !year3) return res.status(400).json({ error: 'All params required' });
@@ -1141,7 +1306,7 @@ app.get('/api/compare', auth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.get('/api/compare/export', auth, async (req, res) => {
+app.get('/api/compare/export', auth, dashboardOnly, async (req, res) => {
   try {
     const { startMonth, startDay, endMonth, endDay, year1, year2, year3, campus, course, mode } = req.query;
     if (!startMonth || !startDay || !endMonth || !endDay || !year1 || !year2 || !year3) return res.status(400).json({ error: 'All params required' });

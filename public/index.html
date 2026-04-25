@@ -41,6 +41,7 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg)
 .nav-role{padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;}
 .nav-role.role-admin{background:var(--danger);color:white;}
 .nav-role.role-user{background:var(--info);color:white;}
+.nav-role.role-photography{background:var(--warning);color:white;}
 .logout-btn{padding:6px 14px;background:rgba(239,68,68,0.15);color:#fca5a5;border:1px solid rgba(239,68,68,0.3);border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;}
 .logout-btn:hover{background:var(--danger);color:white;border-color:var(--danger);}
 
@@ -535,12 +536,18 @@ tbody tr{transition:background .1s;}
       </div>
       <div class="section-body">
         <div class="user-mgmt-header">
-          <label>Upload Users CSV</label>
+          <label>Upload Dashboard Users CSV</label>
           <input type="file" id="userCsvUpload" accept=".csv">
-          <button class="btn-purple btn-sm" onclick="uploadUsers()">⬆ Upload Users</button>
+          <button class="btn-purple btn-sm" onclick="uploadUsers('user')">⬆ Upload Users</button>
           <span id="userUploadStatus" class="upload-status"></span>
         </div>
-        <small style="color:var(--text-muted);display:block;margin:8px 0;">CSV must have Email, Password, Name columns</small>
+        <div class="user-mgmt-header" style="margin-top:14px;">
+          <label>Upload Photography Users CSV</label>
+          <input type="file" id="photographyCsvUpload" accept=".csv">
+          <button class="btn-warning btn-sm" onclick="uploadUsers('photography')">⬆ Upload Photography Users</button>
+          <span id="photographyUploadStatus" class="upload-status"></span>
+        </div>
+        <small style="color:var(--text-muted);display:block;margin:8px 0;">CSV must have Email, Password, Name columns. Optional `Role` column can also be used.</small>
         <div id="userListWrap" style="max-height:320px;overflow-y:auto;margin-top:8px;"></div>
       </div>
     </div>
@@ -1028,6 +1035,10 @@ async function doLogin(){
     setToken(d.token);
     localStorage.setItem('userRole',d.role);
     localStorage.setItem('userName',d.name||d.email);
+    if(d.role==='photography'){
+      window.location.href='/photography/';
+      return;
+    }
     showDashboard(d.role, d.name||d.email);
   }catch(e){ errEl.textContent='Login failed: '+e.message; }
 }
@@ -1049,7 +1060,7 @@ function showDashboard(role, name){
   document.getElementById('userName').textContent=name;
   const roleEl=document.getElementById('userRole');
   roleEl.textContent=role.toUpperCase();
-  roleEl.className='nav-role '+(role==='admin'?'role-admin':'role-user');
+  roleEl.className='nav-role '+(role==='admin'?'role-admin':role==='photography'?'role-photography':'role-user');
   const initials=name.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
   document.getElementById('navAvatar').textContent=initials||'U';
   document.querySelectorAll('.admin-only').forEach(el=>{ el.style.display=role==='admin'?'':'none'; });
@@ -1106,6 +1117,11 @@ function switchView(view){
     showLoading('Verifying session...');
     const role=localStorage.getItem('userRole')||'user';
     const name=localStorage.getItem('userName')||'User';
+    if(role==='photography'){
+      hideLoading();
+      window.location.href='/photography/';
+      return;
+    }
     fetch('/api/count',{headers:{'Authorization':'Bearer '+token}}).then(r=>{
       hideLoading();
       if(r.ok){ showDashboard(role,name); } else { clearToken(); showLoginPage(); }
@@ -1430,16 +1446,19 @@ async function downloadAllExcel(){
 }
 
 // ─── User Management ───
-async function uploadUsers(){
-  const file=document.getElementById('userCsvUpload').files[0];
+async function uploadUsers(role='user'){
+  const isPhotography=role==='photography';
+  const input=document.getElementById(isPhotography?'photographyCsvUpload':'userCsvUpload');
+  const status=document.getElementById(isPhotography?'photographyUploadStatus':'userUploadStatus');
+  const file=input.files[0];
   if(!file){alert('Select a CSV file with Email, Password, Name columns.');return;}
-  const status=document.getElementById('userUploadStatus');
   status.textContent='Uploading...'; status.style.color='#ff9800';
   const formData=new FormData(); formData.append('csvFile',file);
+  formData.append('role',role);
   try{
     const r=await authFetch('/api/users/upload',{method:'POST',body:formData});
     const d=await r.json();
-    if(d.success){ status.textContent='✓ '+d.created+' created, '+d.updated+' updated'; status.style.color='#28a745'; document.getElementById('userCsvUpload').value=''; loadUserList(); }
+    if(d.success){ status.textContent='✓ '+d.created+' created, '+d.updated+' updated'; status.style.color='#28a745'; input.value=''; loadUserList(); }
     else{ status.textContent='✗ '+d.error; status.style.color='#dc3545'; }
   }catch(e){ status.textContent='✗ Upload failed'; status.style.color='#dc3545'; }
 }
@@ -1450,10 +1469,11 @@ async function loadUserList(){
     const users=await r.json();
     const wrap=document.getElementById('userListWrap');
     if(!users.length){wrap.innerHTML='<p style="color:#999;">No users yet.</p>';return;}
-    let html='<table class="user-table"><thead><tr><th>Name</th><th>Email</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead><tbody>';
+    let html='<table class="user-table"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead><tbody>';
     users.forEach(u=>{
       const active=u.active!==false;
       html+='<tr><td>'+(u.name||'-')+'</td><td>'+u.email+'</td>';
+      html+='<td>'+((u.role||'user').toUpperCase())+'</td>';
       html+='<td>'+(active?'<span class="status-active">Active</span>':'<span class="status-inactive">Inactive</span>')+'</td>';
       html+='<td>'+(u.createdAt?new Date(u.createdAt).toLocaleDateString():'')+'</td>';
       html+='<td style="display:flex;gap:6px;"><button class="btn-sm '+(active?'btn-success':'btn-ghost')+'" onclick="toggleUser(\''+u._id+'\')">'+(active?'Deactivate':'Activate')+'</button><button class="btn-sm btn-danger" onclick="deleteUser(\''+u._id+'\',\''+u.email+'\')">Delete</button></td></tr>';

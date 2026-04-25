@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Studio Vault</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="site-header">
+        <div class="brand-block">
+          <div class="brand-mark">SV</div>
+          <div>
+            <p class="mini-label">Studio Vault</p>
+            <strong>Team media workspace</strong>
+          </div>
+        </div>
+
+        <nav class="header-nav" aria-label="Primary">
+          <a href="#upload">Upload</a>
+          <a href="#library">Library</a>
+          <a href="#storage">Storage</a>
+        </nav>
+
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="text-align:right;">
+            <p class="mini-label" style="margin-bottom:2px;">Signed in</p>
+            <strong id="session-user">Photography user</strong>
+          </div>
+          <button id="refresh-button" class="ghost-button" type="button">Refresh</button>
+          <button id="logout-button" class="ghost-button" type="button">Logout</button>
+        </div>
+      </header>
+
+      <main class="content-stack">
+        <section class="hero-section">
+          <div class="hero-copy">
+            <p class="mini-label">A showcase of your valued files</p>
+            <p class="hero-text">
+              Upload at the top, keep the library clear below, download whenever needed, and delete
+              from the website with an extra confirmation so nothing disappears by mistake.
+            </p>
+          </div>
+
+          <div class="hero-stats" id="storage">
+            <div class="stat-chip">
+              <span>Bucket</span>
+              <strong id="bucket-status">Checking...</strong>
+            </div>
+            <div class="stat-chip">
+              <span>Files</span>
+              <strong id="total-files">0</strong>
+            </div>
+            <div class="stat-chip">
+              <span>Storage</span>
+              <strong id="total-storage">0 B</strong>
+            </div>
+            <div class="stat-chip">
+              <span>Selected</span>
+              <strong id="queued-count">0</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="upload-section" id="upload">
+          <div class="section-heading">
+            <div>
+              <p class="mini-label">Upload Section</p>
+              <h2>Add new media</h2>
+            </div>
+            <p class="section-note" id="form-status">Ready when you are.</p>
+          </div>
+
+          <form id="upload-form" class="upload-grid">
+            <label class="upload-dropzone" for="file-input">
+              <input id="file-input" name="files" type="file" multiple accept="image/*,video/*" />
+              <span class="upload-kicker">Upload here</span>
+              <span class="upload-title">Choose files or drag them into this section</span>
+              <span class="upload-subtitle">
+                Give every upload a custom name before it goes into the photography folder.
+              </span>
+            </label>
+
+            <aside class="queue-summary">
+              <div class="summary-card">
+                <span>Queued size</span>
+                <strong id="selected-size">0 B</strong>
+              </div>
+              <div class="summary-card">
+                <span>Images in library</span>
+                <strong id="image-count">0</strong>
+              </div>
+              <div class="summary-card">
+                <span>Videos in library</span>
+                <strong id="video-count">0</strong>
+              </div>
+              <button class="primary-button" type="submit">Upload to Folder</button>
+            </aside>
+          </form>
+
+          <div id="selected-files" class="selected-files empty-state">
+            No files selected yet.
+          </div>
+        </section>
+
+        <section class="library-section" id="library">
+          <div class="section-heading">
+            <div>
+              <p class="mini-label">Library</p>
+              <h2>All uploaded files</h2>
+            </div>
+            <input id="search-input" type="search" placeholder="Search files..." />
+          </div>
+
+          <div class="library-head">
+            <span>Name</span>
+            <span>Type</span>
+            <span>Size</span>
+            <span>Date</span>
+            <span>Actions</span>
+          </div>
+
+          <div id="library-list" class="library-list">
+            <div class="empty-state">Loading files from the photography folder...</div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <template id="selected-file-template">
+      <div class="selected-file">
+        <div class="selected-file-meta">
+          <strong class="selected-file-original"></strong>
+          <span class="selected-file-size"></span>
+        </div>
+        <label>
+          <span>Custom name</span>
+          <input class="selected-file-name" type="text" maxlength="120" />
+        </label>
+      </div>
+    </template>
+
+    <template id="library-item-template">
+      <article class="library-item">
+        <div class="library-name-cell">
+          <span class="file-badge"></span>
+          <div>
+            <h3 class="library-item-name"></h3>
+          </div>
+        </div>
+        <p class="library-kind"></p>
+        <p class="library-size"></p>
+        <p class="library-item-meta"></p>
+        <div class="library-item-actions">
+          <a class="primary-button download-link">Download</a>
+          <button class="danger-button delete-button" type="button">Delete</button>
+        </div>
+      </article>
+    </template>
+
+    <script src="./app.js" defer></script>
+  </body>
+</html>

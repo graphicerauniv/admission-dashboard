@@ -1,0 +1,19 @@
+{
+  "name": "photography-s3-library",
+  "version": "1.0.0",
+  "description": "Team media library for uploading, browsing, and downloading files from Amazon S3.",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.835.0",
+    "@aws-sdk/s3-request-presigner": "^3.835.0",
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2",
+    "mime-types": "^2.1.35",
+    "multer": "^1.4.5-lts.2"
+  }
+}
