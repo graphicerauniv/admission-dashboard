@@ -24,8 +24,8 @@ const libraryItemTemplate = document.querySelector("#library-item-template");
 
 let selectedFiles = [];
 let libraryFiles = [];
-const MAX_BATCH_FILES = 100;
-const MAX_BATCH_BYTES = 50 * 1024 * 1024;
+const MAX_BATCH_FILES = 20;
+const MAX_BATCH_BYTES = 10 * 1024 * 1024;
 
 function createSelectedFileEntry(file) {
   const relativePath = file.webkitRelativePath || file.name;
