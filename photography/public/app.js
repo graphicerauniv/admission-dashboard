@@ -24,19 +24,21 @@ const libraryItemTemplate = document.querySelector("#library-item-template");
 
 let selectedFiles = [];
 let libraryFiles = [];
-const MAX_BATCH_FILES = 5;
-const MAX_BATCH_BYTES = 5 * 1024 * 1024;
+const expandedFolderPaths = new Set([""]);
+const activePreviewUrls = new Map();
+const MAX_BATCH_FILES = 10;
+const MAX_BATCH_BYTES = 20 * 1024 * 1024;
 const MAX_BATCH_RETRIES = 2;
+const UPLOAD_CONCURRENCY = 3;
+const MULTIPART_THRESHOLD_BYTES = 100 * 1024 * 1024;
+const MULTIPART_PART_CONCURRENCY = 4;
+const MULTIPART_PART_RETRIES = 2;
 
 function createSelectedFileEntry(file) {
   const relativePath = file.webkitRelativePath || file.name;
   return {
     file,
     relativePath,
-    previewUrl:
-      file.type.startsWith("image/") || file.type.startsWith("video/")
-        ? URL.createObjectURL(file)
-        : "",
     status: "queued",
     uploadedBytes: 0,
     progress: 0,
@@ -118,13 +120,25 @@ function getEntryKind(entry) {
   return "file";
 }
 
-function revokePreviewUrls(entries) {
-  entries.forEach((entry) => {
-    if (entry.previewUrl) {
-      URL.revokeObjectURL(entry.previewUrl);
-      entry.previewUrl = "";
-    }
+function shouldUseMultipart(entry) {
+  return entry.file.size >= MULTIPART_THRESHOLD_BYTES;
+}
+
+function revokeAllActivePreviewUrls() {
+  activePreviewUrls.forEach((previewUrl) => {
+    URL.revokeObjectURL(previewUrl);
   });
+  activePreviewUrls.clear();
+}
+
+function getEntryPreviewUrl(entry) {
+  if (activePreviewUrls.has(entry.relativePath)) {
+    return activePreviewUrls.get(entry.relativePath);
+  }
+
+  const previewUrl = URL.createObjectURL(entry.file);
+  activePreviewUrls.set(entry.relativePath, previewUrl);
+  return previewUrl;
 }
 
 async function downloadFile(file) {
@@ -177,7 +191,158 @@ function updateLibraryStats() {
   videoCountElement.textContent = String(videoCount);
 }
 
+function createSelectionTree(entries) {
+  const root = {
+    path: "",
+    name: "root",
+    folders: new Map(),
+    files: []
+  };
+
+  entries.forEach((entry) => {
+    const segments = entry.relativePath.split("/").filter(Boolean);
+    const fileName = segments.pop() || entry.file.name;
+    let currentNode = root;
+    let currentPath = "";
+
+    segments.forEach((segment) => {
+      currentPath = currentPath ? `${currentPath}/${segment}` : segment;
+      if (!currentNode.folders.has(segment)) {
+        currentNode.folders.set(segment, {
+          path: currentPath,
+          name: segment,
+          folders: new Map(),
+          files: []
+        });
+      }
+      currentNode = currentNode.folders.get(segment);
+    });
+
+    currentNode.files.push({
+      ...entry,
+      displayName: fileName
+    });
+  });
+
+  return root;
+}
+
+function renderSelectedFileEntry(entry) {
+  const fragment = selectedFileTemplate.content.cloneNode(true);
+  const previewImage = fragment.querySelector(".selected-file-preview-image");
+  const previewVideo = fragment.querySelector(".selected-file-preview-video");
+  const previewFallback = fragment.querySelector(".selected-file-preview-fallback");
+  const entryKind = getEntryKind(entry);
+
+  if ((entryKind === "image" || entryKind === "video") && entry.file.size <= 100 * 1024 * 1024) {
+    const previewUrl = getEntryPreviewUrl(entry);
+    if (entryKind === "image") {
+      previewImage.src = previewUrl;
+      previewImage.hidden = false;
+      previewFallback.hidden = true;
+    } else {
+      previewVideo.src = previewUrl;
+      previewVideo.hidden = false;
+      previewFallback.hidden = true;
+      previewFallback.textContent = "VIDEO";
+    }
+  } else {
+    previewFallback.textContent = getBadgeText(entryKind);
+  }
+
+  fragment.querySelector(".selected-file-original").textContent = entry.displayName || entry.relativePath;
+  fragment.querySelector(".selected-file-size").textContent = `${entryKind.toUpperCase()} • ${formatBytes(entry.file.size)}`;
+  fragment.querySelector(".selected-file-status").textContent =
+    entry.status === "uploading"
+      ? "Uploading now"
+      : entry.status === "completed"
+        ? "Uploaded"
+        : entry.status === "error"
+          ? entry.errorMessage || "Upload failed"
+          : "Ready to upload";
+
+  const progressBar = fragment.querySelector(".selected-file-progress-bar");
+  progressBar.style.width = `${Math.max(0, Math.min(entry.progress * 100, 100))}%`;
+
+  fragment.querySelector(".selected-file-progress-text").textContent =
+    `${formatBytes(entry.uploadedBytes)} of ${formatBytes(entry.file.size)} (${Math.round(entry.progress * 100)}%)`;
+
+  const input = fragment.querySelector(".selected-file-name");
+  input.value = entry.relativePath;
+  input.disabled = true;
+
+  return fragment;
+}
+
+function countTreeStats(node) {
+  let folderCount = 0;
+  let fileCount = node.files.length;
+
+  node.folders.forEach((childNode) => {
+    const childStats = countTreeStats(childNode);
+    folderCount += 1 + childStats.folderCount;
+    fileCount += childStats.fileCount;
+  });
+
+  return { folderCount, fileCount };
+}
+
+function renderSelectionTreeNode(node, level = 0) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "selection-tree-node";
+
+  const sortedFolders = Array.from(node.folders.values()).sort((a, b) => a.name.localeCompare(b.name));
+  const sortedFiles = [...node.files].sort((a, b) => (a.displayName || a.relativePath).localeCompare(b.displayName || b.relativePath));
+
+  sortedFolders.forEach((childNode) => {
+    const folderStats = countTreeStats(childNode);
+    const folderElement = document.createElement("div");
+    folderElement.className = "selection-folder";
+
+    const folderButton = document.createElement("button");
+    folderButton.type = "button";
+    folderButton.className = "selection-folder-toggle";
+    folderButton.style.setProperty("--folder-level", String(level));
+    folderButton.innerHTML = `
+      <span class="selection-folder-caret">${expandedFolderPaths.has(childNode.path) ? "▾" : "▸"}</span>
+      <span class="selection-folder-name">${childNode.name}</span>
+      <span class="selection-folder-meta">${folderStats.fileCount} files${folderStats.folderCount ? ` • ${folderStats.folderCount} folders` : ""}</span>
+    `;
+    folderButton.addEventListener("click", () => {
+      if (expandedFolderPaths.has(childNode.path)) {
+        expandedFolderPaths.delete(childNode.path);
+      } else {
+        expandedFolderPaths.add(childNode.path);
+      }
+      renderSelectedFiles();
+    });
+
+    folderElement.appendChild(folderButton);
+
+    if (expandedFolderPaths.has(childNode.path)) {
+      const childContent = document.createElement("div");
+      childContent.className = "selection-folder-children";
+      childContent.appendChild(renderSelectionTreeNode(childNode, level + 1));
+      folderElement.appendChild(childContent);
+    }
+
+    wrapper.appendChild(folderElement);
+  });
+
+  sortedFiles.forEach((entry) => {
+    const fileWrapper = document.createElement("div");
+    fileWrapper.className = "selection-file-wrapper";
+    fileWrapper.style.setProperty("--file-level", String(level));
+    fileWrapper.appendChild(renderSelectedFileEntry(entry));
+    wrapper.appendChild(fileWrapper);
+  });
+
+  return wrapper;
+}
+
 function renderSelectedFiles() {
+  revokeAllActivePreviewUrls();
+
   if (!selectedFiles.length) {
     selectedFilesContainer.className = "selected-files empty-state";
     selectedFilesContainer.textContent = "No files selected yet.";
@@ -186,52 +351,10 @@ function renderSelectedFiles() {
     return;
   }
 
+  const tree = createSelectionTree(selectedFiles);
   selectedFilesContainer.className = "selected-files";
   selectedFilesContainer.innerHTML = "";
-
-  selectedFiles.forEach((entry, index) => {
-    const fragment = selectedFileTemplate.content.cloneNode(true);
-    const previewImage = fragment.querySelector(".selected-file-preview-image");
-    const previewVideo = fragment.querySelector(".selected-file-preview-video");
-    const previewFallback = fragment.querySelector(".selected-file-preview-fallback");
-    const entryKind = getEntryKind(entry);
-
-    if (entryKind === "image" && entry.previewUrl) {
-      previewImage.src = entry.previewUrl;
-      previewImage.hidden = false;
-      previewFallback.hidden = true;
-    } else if (entryKind === "video" && entry.previewUrl) {
-      previewVideo.src = entry.previewUrl;
-      previewVideo.hidden = false;
-      previewFallback.hidden = true;
-      previewFallback.textContent = "VIDEO";
-    } else {
-      previewFallback.textContent = getBadgeText(entryKind);
-    }
-
-    fragment.querySelector(".selected-file-original").textContent = entry.relativePath;
-    fragment.querySelector(".selected-file-size").textContent = formatBytes(entry.file.size);
-    fragment.querySelector(".selected-file-status").textContent =
-      entry.status === "uploading"
-        ? "Uploading now"
-        : entry.status === "completed"
-          ? "Uploaded"
-          : entry.status === "error"
-            ? entry.errorMessage || "Upload failed"
-            : "Ready to upload";
-
-    const progressBar = fragment.querySelector(".selected-file-progress-bar");
-    progressBar.style.width = `${Math.max(0, Math.min(entry.progress * 100, 100))}%`;
-
-    fragment.querySelector(".selected-file-progress-text").textContent =
-      `${formatBytes(entry.uploadedBytes)} of ${formatBytes(entry.file.size)} (${Math.round(entry.progress * 100)}%)`;
-
-    const input = fragment.querySelector(".selected-file-name");
-    input.value = entry.relativePath;
-    input.disabled = true;
-
-    selectedFilesContainer.appendChild(fragment);
-  });
+  selectedFilesContainer.appendChild(renderSelectionTreeNode(tree));
 
   updateQueueStats();
   updateUploadProgressSummary();
@@ -378,13 +501,14 @@ uploadForm.addEventListener("submit", async (event) => {
   }
 
   const queuedEntries = selectedFiles.filter((entry) => entry.status !== "completed");
-  const batches = createUploadBatches(queuedEntries);
+  const multipartEntries = queuedEntries.filter(shouldUseMultipart);
+  const regularEntries = queuedEntries.filter((entry) => !shouldUseMultipart(entry));
   let uploadedCount = 0;
   const failedEntries = [];
 
   formStatus.textContent =
     `Uploading ${queuedEntries.length} item${queuedEntries.length === 1 ? "" : "s"} in ` +
-    `${batches.length} folder batch${batches.length === 1 ? "" : "es"}...`;
+    `${queuedEntries.length} upload job${queuedEntries.length === 1 ? "" : "s"}...`;
 
   try {
     for (const entry of queuedEntries) {
@@ -395,13 +519,26 @@ uploadForm.addEventListener("submit", async (event) => {
     }
     renderSelectedFiles();
 
-    for (const [batchIndex, batchEntries] of batches.entries()) {
+    const uploadJobs = [
+      ...regularEntries.map((entry) => ({
+        run: () => uploadDirectFileWithRetry(entry),
+        label: entry.relativePath
+      })),
+      ...multipartEntries.map((entry) => ({
+        run: () => uploadLargeFileWithMultipart(entry),
+        label: entry.relativePath
+      }))
+    ];
+
+    const uploadResults = await runBatchesWithConcurrency(uploadJobs, async (job, jobIndex) => {
       formStatus.textContent =
-        `Uploading folder batch ${batchIndex + 1} of ${batches.length} ` +
+        `Running upload job ${jobIndex + 1} of ${uploadJobs.length} ` +
         `(${uploadedCount}/${queuedEntries.length} items finished)...`;
 
-      const result = await uploadBatchWithRecovery(batchEntries);
+      return job.run();
+    });
 
+    uploadResults.forEach((result) => {
       for (const entry of result.uploadedEntries) {
         entry.status = "completed";
         entry.uploadedBytes = entry.file.size;
@@ -416,9 +553,9 @@ uploadForm.addEventListener("submit", async (event) => {
         failure.entry.errorMessage = failure.error.message;
         failedEntries.push(failure.entry);
       }
+    });
 
-      renderSelectedFiles();
-    }
+    renderSelectedFiles();
 
     await fetchLibrary();
 
@@ -426,7 +563,6 @@ uploadForm.addEventListener("submit", async (event) => {
       ? `${uploadedCount} uploaded, ${failedEntries.length} failed. Failed files stayed in the queue for retry.`
       : `Folder uploaded successfully with ${queuedEntries.length} item${queuedEntries.length === 1 ? "" : "s"}.`;
 
-    revokePreviewUrls(selectedFiles.filter((entry) => entry.status === "completed"));
     selectedFiles = selectedFiles.filter((entry) => entry.status === "error");
     renderSelectedFiles();
   } catch (error) {
@@ -442,154 +578,313 @@ uploadForm.addEventListener("submit", async (event) => {
   }
 });
 
-function applyBatchProgress(entries, loadedBytes) {
-  let remaining = Math.max(0, loadedBytes);
-
-  entries.forEach((entry) => {
-    const currentLoaded = Math.min(entry.file.size, remaining);
-    entry.uploadedBytes = currentLoaded;
-    entry.progress = entry.file.size > 0 ? Math.min(currentLoaded / entry.file.size, 1) : 0;
-    remaining = Math.max(0, remaining - entry.file.size);
-  });
-
-  renderSelectedFiles();
-}
-
-function createUploadBatches(entries) {
-  const batches = [];
-  let currentBatch = [];
-  let currentBatchBytes = 0;
-
-  entries.forEach((entry) => {
-    const isVideo = getEntryKind(entry) === "video";
-    const isOversized = entry.file.size > MAX_BATCH_BYTES;
-
-    if (isVideo || isOversized) {
-      if (currentBatch.length) {
-        batches.push(currentBatch);
-        currentBatch = [];
-        currentBatchBytes = 0;
-      }
-      batches.push([entry]);
-      return;
-    }
-
-    const wouldExceedFileLimit = currentBatch.length >= MAX_BATCH_FILES;
-    const wouldExceedByteLimit =
-      currentBatch.length > 0 && currentBatchBytes + entry.file.size > MAX_BATCH_BYTES;
-
-    if (wouldExceedFileLimit || wouldExceedByteLimit) {
-      batches.push(currentBatch);
-      currentBatch = [];
-      currentBatchBytes = 0;
-    }
-
-    currentBatch.push(entry);
-    currentBatchBytes += entry.file.size;
-  });
-
-  if (currentBatch.length) {
-    batches.push(currentBatch);
-  }
-
-  return batches;
-}
-
-async function uploadBatchWithRecovery(entries, attempt = 0) {
-  try {
-    await uploadFilesBatch(entries);
-    return {
-      uploadedEntries: entries,
-      failedEntries: []
-    };
-  } catch (error) {
-    const shouldRetry = attempt < MAX_BATCH_RETRIES;
-
-    if (shouldRetry) {
-      await wait(600 * (attempt + 1));
-      return uploadBatchWithRecovery(entries, attempt + 1);
-    }
-
-    if (entries.length === 1) {
-      return {
-        uploadedEntries: [],
-        failedEntries: [{ entry: entries[0], error }]
-      };
-    }
-
-    const midpoint = Math.ceil(entries.length / 2);
-    const leftResult = await uploadBatchWithRecovery(entries.slice(0, midpoint));
-    const rightResult = await uploadBatchWithRecovery(entries.slice(midpoint));
-
-    return {
-      uploadedEntries: [...leftResult.uploadedEntries, ...rightResult.uploadedEntries],
-      failedEntries: [...leftResult.failedEntries, ...rightResult.failedEntries]
-    };
-  }
-}
-
 function wait(ms) {
   return new Promise((resolve) => {
     window.setTimeout(resolve, ms);
   });
 }
 
-function uploadFilesBatch(entries) {
-  const token = getToken();
+async function runBatchesWithConcurrency(items, worker, concurrency = UPLOAD_CONCURRENCY) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
 
-  if (!token) {
-    redirectToLogin();
-    return Promise.reject(new Error("Login required."));
+  async function runWorker() {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      results[currentIndex] = await worker(items[currentIndex], currentIndex);
+    }
   }
 
-  return new Promise((resolve, reject) => {
-    const formData = new FormData();
-    entries.forEach((entry) => {
-      formData.append("files", entry.file);
-      formData.append("paths", entry.relativePath);
-    });
+  const workers = Array.from(
+    { length: Math.min(concurrency, items.length) },
+    () => runWorker()
+  );
 
+  await Promise.all(workers);
+  return results;
+}
+
+async function uploadDirectFileWithRetry(entry, attempt = 0) {
+  try {
+    const signedUpload = await initializeDirectUpload(entry);
+    await uploadDirectFileToS3(entry, signedUpload);
+    return {
+      uploadedEntries: [entry],
+      failedEntries: []
+    };
+  } catch (error) {
+    if (attempt >= MAX_BATCH_RETRIES) {
+      return {
+        uploadedEntries: [],
+        failedEntries: [{ entry, error }]
+      };
+    }
+
+    await wait(600 * (attempt + 1));
+    return uploadDirectFileWithRetry(entry, attempt + 1);
+  }
+}
+
+async function initializeDirectUpload(entry) {
+  const response = await authFetch("/api/photography/direct-upload/sign", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      fileName: entry.file.name,
+      relativePath: entry.relativePath,
+      contentType: entry.file.type || "application/octet-stream"
+    })
+  });
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.details || data.message || "Failed to prepare direct upload.");
+  }
+
+  return data;
+}
+
+function uploadDirectFileToS3(entry, signedUpload) {
+  return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", "/api/photography/upload");
-    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.open("PUT", signedUpload.signedUrl);
+    xhr.setRequestHeader("Content-Type", entry.file.type || "application/octet-stream");
 
     xhr.upload.addEventListener("progress", (event) => {
       if (!event.lengthComputable) {
         return;
       }
 
-      const totalFileBytes = entries.reduce((sum, entry) => sum + entry.file.size, 0);
-      const payloadRatio = event.total > 0 ? event.loaded / event.total : 0;
-      applyBatchProgress(entries, totalFileBytes * payloadRatio);
+      entry.uploadedBytes = Math.min(event.loaded, entry.file.size);
+      entry.progress = entry.file.size > 0 ? Math.min(entry.uploadedBytes / entry.file.size, 1) : 0;
+      renderSelectedFiles();
     });
 
     xhr.addEventListener("load", () => {
-      const data = parseJsonResponse(xhr.responseText);
-
-      if (xhr.status === 401 || xhr.status === 403) {
-        redirectToLogin();
-        reject(new Error("Your session has expired."));
-        return;
-      }
-
       if (xhr.status < 200 || xhr.status >= 300) {
-        reject(new Error(data.details || data.message || "Upload failed."));
+        reject(new Error("Direct upload failed while sending the file to S3."));
         return;
       }
 
-      resolve(data);
+      entry.uploadedBytes = entry.file.size;
+      entry.progress = 1;
+      renderSelectedFiles();
+      resolve();
     });
 
     xhr.addEventListener("error", () => {
-      reject(new Error("Upload failed because the network connection was interrupted."));
+      reject(new Error("Direct upload failed because the S3 connection was interrupted."));
     });
 
     xhr.addEventListener("abort", () => {
-      reject(new Error("Upload was cancelled."));
+      reject(new Error("Direct upload was cancelled."));
     });
 
-    xhr.send(formData);
+    xhr.send(entry.file);
   });
+}
+
+async function uploadLargeFileWithMultipart(entry) {
+  let initializedUpload = null;
+
+  try {
+    initializedUpload = await initializeMultipartUpload(entry);
+    const parts = await uploadMultipartParts(entry, initializedUpload);
+    await completeMultipartUpload(initializedUpload, parts);
+
+    return {
+      uploadedEntries: [entry],
+      failedEntries: []
+    };
+  } catch (error) {
+    if (initializedUpload?.uploadId) {
+      await abortMultipartUpload(initializedUpload).catch(() => {});
+    }
+
+    return {
+      uploadedEntries: [],
+      failedEntries: [{ entry, error }]
+    };
+  }
+}
+
+async function initializeMultipartUpload(entry) {
+  const response = await authFetch("/api/photography/multipart/init", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      fileName: entry.file.name,
+      relativePath: entry.relativePath,
+      contentType: entry.file.type || "application/octet-stream",
+      size: entry.file.size
+    })
+  });
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.details || data.message || "Failed to initialize multipart upload.");
+  }
+
+  return data;
+}
+
+async function uploadMultipartParts(entry, initializedUpload) {
+  const totalParts = Math.ceil(entry.file.size / initializedUpload.partSize);
+  const loadedParts = new Map();
+  const completedParts = [];
+  const partNumbers = Array.from({ length: totalParts }, (_, index) => index + 1);
+
+  await runBatchesWithConcurrency(
+    partNumbers,
+    async (partNumber) => {
+      const part = await uploadMultipartPartWithRetry(entry, initializedUpload, partNumber, loadedParts);
+      completedParts.push(part);
+    },
+    MULTIPART_PART_CONCURRENCY
+  );
+
+  return completedParts.sort((a, b) => a.PartNumber - b.PartNumber);
+}
+
+async function uploadMultipartPartWithRetry(entry, initializedUpload, partNumber, loadedParts, attempt = 0) {
+  try {
+    return await uploadMultipartPart(entry, initializedUpload, partNumber, loadedParts);
+  } catch (error) {
+    if (attempt >= MULTIPART_PART_RETRIES) {
+      throw error;
+    }
+
+    await wait(700 * (attempt + 1));
+    return uploadMultipartPartWithRetry(entry, initializedUpload, partNumber, loadedParts, attempt + 1);
+  }
+}
+
+async function uploadMultipartPart(entry, initializedUpload, partNumber, loadedParts) {
+  const signResponse = await authFetch("/api/photography/multipart/sign", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      key: initializedUpload.key,
+      uploadId: initializedUpload.uploadId,
+      partNumber
+    })
+  });
+  const signData = await signResponse.json();
+
+  if (!signResponse.ok) {
+    throw new Error(signData.details || signData.message || "Failed to sign multipart upload part.");
+  }
+
+  const start = (partNumber - 1) * initializedUpload.partSize;
+  const end = Math.min(start + initializedUpload.partSize, entry.file.size);
+  const blob = entry.file.slice(start, end);
+
+  return putMultipartPart(entry, blob, signData.signedUrl, partNumber, loadedParts);
+}
+
+function putMultipartPart(entry, blob, signedUrl, partNumber, loadedParts) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", signedUrl);
+    xhr.setRequestHeader("Content-Type", entry.file.type || "application/octet-stream");
+
+    xhr.upload.addEventListener("progress", (event) => {
+      if (!event.lengthComputable) {
+        return;
+      }
+
+      loadedParts.set(partNumber, event.loaded);
+      updateMultipartEntryProgress(entry, loadedParts);
+    });
+
+    xhr.addEventListener("load", () => {
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new Error("A multipart upload part failed to reach S3."));
+        return;
+      }
+
+      const etag = xhr.getResponseHeader("ETag");
+      if (!etag) {
+        reject(new Error("S3 did not return an ETag. Add bucket CORS to expose the ETag header."));
+        return;
+      }
+
+      loadedParts.set(partNumber, blob.size);
+      updateMultipartEntryProgress(entry, loadedParts);
+      resolve({
+        ETag: etag,
+        PartNumber: partNumber
+      });
+    });
+
+    xhr.addEventListener("error", () => {
+      reject(new Error("Multipart upload failed while sending a part to S3."));
+    });
+
+    xhr.addEventListener("abort", () => {
+      reject(new Error("Multipart upload was cancelled."));
+    });
+
+    xhr.send(blob);
+  });
+}
+
+function updateMultipartEntryProgress(entry, loadedParts) {
+  let uploadedBytes = 0;
+  loadedParts.forEach((value) => {
+    uploadedBytes += value;
+  });
+  entry.uploadedBytes = Math.min(uploadedBytes, entry.file.size);
+  entry.progress = entry.file.size > 0 ? Math.min(entry.uploadedBytes / entry.file.size, 1) : 0;
+  renderSelectedFiles();
+}
+
+async function completeMultipartUpload(initializedUpload, parts) {
+  const response = await authFetch("/api/photography/multipart/complete", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      key: initializedUpload.key,
+      uploadId: initializedUpload.uploadId,
+      parts
+    })
+  });
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.details || data.message || "Failed to complete multipart upload.");
+  }
+
+  return data;
+}
+
+async function abortMultipartUpload(initializedUpload) {
+  const response = await authFetch("/api/photography/multipart/abort", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      key: initializedUpload.key,
+      uploadId: initializedUpload.uploadId
+    })
+  });
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.details || data.message || "Failed to abort multipart upload.");
+  }
+
+  return data;
 }
 
 function parseJsonResponse(value) {

@@ -31,7 +31,18 @@ fs.mkdirSync(photographyUploadsDir, { recursive: true });
 fs.mkdirSync(photographyTempDir, { recursive: true });
 app.use('/photography', express.static(photographyPublicDir));
 
-const { S3Client, PutObjectCommand, ListObjectsV2Command, GetObjectCommand, HeadBucketCommand, DeleteObjectCommand } =
+const {
+  S3Client,
+  PutObjectCommand,
+  ListObjectsV2Command,
+  GetObjectCommand,
+  HeadBucketCommand,
+  DeleteObjectCommand,
+  CreateMultipartUploadCommand,
+  UploadPartCommand,
+  CompleteMultipartUploadCommand,
+  AbortMultipartUploadCommand
+} =
   require(path.join(__dirname, 'photography', 'node_modules', '@aws-sdk', 'client-s3'));
 const { getSignedUrl } =
   require(path.join(__dirname, 'photography', 'node_modules', '@aws-sdk', 's3-request-presigner'));
@@ -139,9 +150,22 @@ const photographyUpload = multer({
 const photographyS3 = S3_BUCKET_NAME
   ? new S3Client({ region: AWS_REGION, followRegionRedirects: true, ...(photographyCredentials ? { credentials: photographyCredentials } : {}) })
   : null;
+const photographyMultipartPartSize = Math.max(
+  5 * 1024 * 1024,
+  parseFileSizeLimitMb(
+    photographyEnv.PHOTOGRAPHY_MULTIPART_PART_SIZE_MB ||
+    process.env.PHOTOGRAPHY_MULTIPART_PART_SIZE_MB ||
+    '16',
+    16
+  ) * 1024 * 1024
+);
+const photographyMultipartSignedUrlExpirySeconds = 60 * 15;
 
-function normalizePhotographyRelativePath(file, relativePath) {
-  const fallbackName = path.basename(file.originalname);
+function normalizePhotographyRelativePath(fileOrName, relativePath) {
+  const fallbackName =
+    typeof fileOrName === 'string'
+      ? path.basename(fileOrName)
+      : path.basename(fileOrName.originalname);
   const normalized = String(relativePath || fallbackName)
     .replace(/\\/g, '/')
     .split('/')
@@ -154,6 +178,10 @@ function normalizePhotographyRelativePath(file, relativePath) {
 
 function buildPhotographyObjectKey(file, relativePath) {
   return `library/${normalizePhotographyRelativePath(file, relativePath)}`;
+}
+
+function buildPhotographyObjectKeyFromPath(fileName, relativePath) {
+  return `library/${normalizePhotographyRelativePath(fileName, relativePath)}`;
 }
 
 function formatBytes(value) {
@@ -411,6 +439,188 @@ app.post('/api/photography/upload', auth, photographyAccessOnly, photographyUplo
       }
     }));
     res.status(500).json({ message: 'Upload failed.', details: err.message });
+  }
+});
+
+app.post('/api/photography/multipart/init', auth, photographyAccessOnly, async (req, res) => {
+  try {
+    if (!ensurePhotographyS3Configured(res)) {
+      return;
+    }
+
+    const {
+      fileName,
+      relativePath,
+      contentType,
+      size
+    } = req.body ?? {};
+
+    if (!fileName || typeof fileName !== 'string') {
+      return res.status(400).json({ message: 'A valid fileName is required.' });
+    }
+
+    const key = buildPhotographyObjectKeyFromPath(fileName, relativePath || fileName);
+    const multipart = await photographyS3.send(new CreateMultipartUploadCommand({
+      Bucket: S3_BUCKET_NAME,
+      Key: key,
+      ContentType: typeof contentType === 'string' && contentType ? contentType : 'application/octet-stream'
+    }));
+
+    return res.status(201).json({
+      key,
+      uploadId: multipart.UploadId,
+      partSize: photographyMultipartPartSize,
+      size: Number(size) || 0
+    });
+  } catch (err) {
+    return res.status(500).json({
+      message: 'Failed to initialize multipart upload.',
+      details: err.message
+    });
+  }
+});
+
+app.post('/api/photography/direct-upload/sign', auth, photographyAccessOnly, async (req, res) => {
+  try {
+    if (!ensurePhotographyS3Configured(res)) {
+      return;
+    }
+
+    const { fileName, relativePath, contentType } = req.body ?? {};
+
+    if (!fileName || typeof fileName !== 'string') {
+      return res.status(400).json({ message: 'A valid fileName is required.' });
+    }
+
+    const key = buildPhotographyObjectKeyFromPath(fileName, relativePath || fileName);
+    const signedUrl = await getSignedUrl(
+      photographyS3,
+      new PutObjectCommand({
+        Bucket: S3_BUCKET_NAME,
+        Key: key,
+        ContentType: typeof contentType === 'string' && contentType ? contentType : 'application/octet-stream'
+      }),
+      { expiresIn: photographyMultipartSignedUrlExpirySeconds }
+    );
+
+    return res.json({
+      key,
+      signedUrl,
+      expiresIn: photographyMultipartSignedUrlExpirySeconds
+    });
+  } catch (err) {
+    return res.status(500).json({
+      message: 'Failed to sign direct upload.',
+      details: err.message
+    });
+  }
+});
+
+app.post('/api/photography/multipart/sign', auth, photographyAccessOnly, async (req, res) => {
+  try {
+    if (!ensurePhotographyS3Configured(res)) {
+      return;
+    }
+
+    const { key, uploadId, partNumber } = req.body ?? {};
+    const numericPartNumber = Number(partNumber);
+
+    if (!key || typeof key !== 'string' || !uploadId || typeof uploadId !== 'string' || !Number.isInteger(numericPartNumber) || numericPartNumber < 1) {
+      return res.status(400).json({ message: 'key, uploadId, and a valid partNumber are required.' });
+    }
+
+    const signedUrl = await getSignedUrl(
+      photographyS3,
+      new UploadPartCommand({
+        Bucket: S3_BUCKET_NAME,
+        Key: key,
+        UploadId: uploadId,
+        PartNumber: numericPartNumber
+      }),
+      { expiresIn: photographyMultipartSignedUrlExpirySeconds }
+    );
+
+    return res.json({
+      signedUrl,
+      expiresIn: photographyMultipartSignedUrlExpirySeconds
+    });
+  } catch (err) {
+    return res.status(500).json({
+      message: 'Failed to sign multipart upload part.',
+      details: err.message
+    });
+  }
+});
+
+app.post('/api/photography/multipart/complete', auth, photographyAccessOnly, async (req, res) => {
+  try {
+    if (!ensurePhotographyS3Configured(res)) {
+      return;
+    }
+
+    const { key, uploadId, parts } = req.body ?? {};
+    if (!key || typeof key !== 'string' || !uploadId || typeof uploadId !== 'string' || !Array.isArray(parts) || !parts.length) {
+      return res.status(400).json({ message: 'key, uploadId, and parts are required.' });
+    }
+
+    const normalizedParts = parts
+      .map((part) => ({
+        ETag: part?.ETag,
+        PartNumber: Number(part?.PartNumber)
+      }))
+      .filter((part) => part.ETag && Number.isInteger(part.PartNumber) && part.PartNumber > 0)
+      .sort((a, b) => a.PartNumber - b.PartNumber);
+
+    if (!normalizedParts.length) {
+      return res.status(400).json({ message: 'No valid multipart parts were provided.' });
+    }
+
+    await photographyS3.send(new CompleteMultipartUploadCommand({
+      Bucket: S3_BUCKET_NAME,
+      Key: key,
+      UploadId: uploadId,
+      MultipartUpload: {
+        Parts: normalizedParts
+      }
+    }));
+
+    return res.json({
+      message: 'Multipart upload completed successfully.',
+      key
+    });
+  } catch (err) {
+    return res.status(500).json({
+      message: 'Failed to complete multipart upload.',
+      details: err.message
+    });
+  }
+});
+
+app.post('/api/photography/multipart/abort', auth, photographyAccessOnly, async (req, res) => {
+  try {
+    if (!ensurePhotographyS3Configured(res)) {
+      return;
+    }
+
+    const { key, uploadId } = req.body ?? {};
+    if (!key || typeof key !== 'string' || !uploadId || typeof uploadId !== 'string') {
+      return res.status(400).json({ message: 'key and uploadId are required.' });
+    }
+
+    await photographyS3.send(new AbortMultipartUploadCommand({
+      Bucket: S3_BUCKET_NAME,
+      Key: key,
+      UploadId: uploadId
+    }));
+
+    return res.json({
+      message: 'Multipart upload aborted.'
+    });
+  } catch (err) {
+    return res.status(500).json({
+      message: 'Failed to abort multipart upload.',
+      details: err.message
+    });
   }
 });
 
