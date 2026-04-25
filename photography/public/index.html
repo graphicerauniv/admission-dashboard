@@ -81,10 +81,14 @@
           <form id="upload-form" class="upload-grid">
             <label class="upload-dropzone" for="file-input">
               <input id="file-input" name="files" type="file" multiple accept="image/*,video/*" />
+              <input id="folder-input" name="folder-files" type="file" multiple webkitdirectory directory />
               <span class="upload-kicker">Upload here</span>
               <span class="upload-title">Choose files or drag them into this section</span>
               <span class="upload-subtitle">
-                Select multiple photos or videos, rename them before upload, and monitor the live progress of large files.
+                Select multiple photos or videos, or choose a full folder, rename them before upload, and monitor the live progress of large files.
+              </span>
+              <span class="upload-subtitle">
+                <button id="folder-picker-button" class="ghost-button" type="button">Choose Full Folder</button>
               </span>
             </label>
 

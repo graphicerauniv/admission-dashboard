@@ -1,4 +1,6 @@
 const fileInput = document.querySelector("#file-input");
+const folderInput = document.querySelector("#folder-input");
+const folderPickerButton = document.querySelector("#folder-picker-button");
 const uploadForm = document.querySelector("#upload-form");
 const selectedFilesContainer = document.querySelector("#selected-files");
 const libraryList = document.querySelector("#library-list");
@@ -24,8 +26,10 @@ let selectedFiles = [];
 let libraryFiles = [];
 
 function createSelectedFileEntry(file) {
+  const relativePath = file.webkitRelativePath || file.name;
   return {
     file,
+    relativePath,
     customName: file.name.replace(/\.[^.]+$/, ""),
     status: "queued",
     uploadedBytes: 0,
@@ -165,7 +169,7 @@ function renderSelectedFiles() {
 
   selectedFiles.forEach((entry, index) => {
     const fragment = selectedFileTemplate.content.cloneNode(true);
-    fragment.querySelector(".selected-file-original").textContent = entry.file.name;
+    fragment.querySelector(".selected-file-original").textContent = entry.relativePath;
     fragment.querySelector(".selected-file-size").textContent = formatBytes(entry.file.size);
     fragment.querySelector(".selected-file-status").textContent =
       entry.status === "uploading"
@@ -198,7 +202,10 @@ function renderSelectedFiles() {
 
 function renderLibrary() {
   const query = searchInput.value.trim().toLowerCase();
-  const files = libraryFiles.filter((file) => file.name.toLowerCase().includes(query));
+  const files = libraryFiles.filter((file) => {
+    const haystack = `${file.name} ${file.relativePath || ""}`.toLowerCase();
+    return haystack.includes(query);
+  });
 
   if (!files.length) {
     libraryList.innerHTML = '<div class="empty-state">No matching files found in the photography folder.</div>';
@@ -210,7 +217,7 @@ function renderLibrary() {
   files.forEach((file) => {
     const fragment = libraryItemTemplate.content.cloneNode(true);
     fragment.querySelector(".file-badge").textContent = getBadgeText(file.kind);
-    fragment.querySelector(".library-item-name").textContent = file.name;
+    fragment.querySelector(".library-item-name").textContent = file.relativePath || file.name;
     fragment.querySelector(".library-kind").textContent =
       file.kind.charAt(0).toUpperCase() + file.kind.slice(1);
     fragment.querySelector(".library-size").textContent = file.sizeLabel;
@@ -299,11 +306,26 @@ async function fetchLibrary() {
   }
 }
 
-fileInput.addEventListener("change", (event) => {
-  const incomingFiles = Array.from(event.target.files).map(createSelectedFileEntry);
+function addSelectedFiles(fileList) {
+  const incomingFiles = Array.from(fileList).map(createSelectedFileEntry);
   selectedFiles = [...selectedFiles, ...incomingFiles];
-  fileInput.value = "";
   renderSelectedFiles();
+}
+
+fileInput.addEventListener("change", (event) => {
+  addSelectedFiles(event.target.files);
+  fileInput.value = "";
+});
+
+folderInput.addEventListener("change", (event) => {
+  addSelectedFiles(event.target.files);
+  folderInput.value = "";
+});
+
+folderPickerButton.addEventListener("click", (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  folderInput.click();
 });
 
 searchInput.addEventListener("input", renderLibrary);
@@ -375,6 +397,7 @@ function uploadFile(entry) {
     const formData = new FormData();
     formData.append("files", entry.file);
     formData.append("names", entry.customName.trim());
+    formData.append("paths", entry.relativePath);
 
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "/api/photography/upload");

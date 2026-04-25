@@ -23,6 +23,10 @@ app.use(express.static(path.join(__dirname, 'public')));
 const photographyPublicDir = path.join(__dirname, 'photography', 'public');
 const photographyUploadsDir = path.join(__dirname, 'photography', 'uploads');
 const photographyTempDir = path.join(photographyUploadsDir, '.tmp');
+const photographyEnvPath = path.join(__dirname, 'photography', '.env');
+const photographyEnv = fs.existsSync(photographyEnvPath)
+  ? dotenv.parse(fs.readFileSync(photographyEnvPath))
+  : {};
 fs.mkdirSync(photographyUploadsDir, { recursive: true });
 fs.mkdirSync(photographyTempDir, { recursive: true });
 app.use('/photography', express.static(photographyPublicDir));
@@ -35,8 +39,30 @@ const { getSignedUrl } =
 const JWT_SECRET = process.env.JWT_SECRET || 'default-secret-change-me';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@geu.ac.in';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Admin@123';
-const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
-const S3_BUCKET_NAME = process.env.S3_BUCKET_NAME || '';
+const AWS_REGION = photographyEnv.PHOTOGRAPHY_AWS_REGION || photographyEnv.AWS_REGION || process.env.PHOTOGRAPHY_AWS_REGION || process.env.AWS_REGION || 'us-east-1';
+const S3_BUCKET_NAME = photographyEnv.PHOTOGRAPHY_S3_BUCKET_NAME || photographyEnv.S3_BUCKET_NAME || process.env.PHOTOGRAPHY_S3_BUCKET_NAME || process.env.S3_BUCKET_NAME || '';
+const photographyCredentials =
+  (photographyEnv.PHOTOGRAPHY_AWS_ACCESS_KEY_ID && photographyEnv.PHOTOGRAPHY_AWS_SECRET_ACCESS_KEY)
+    ? {
+        accessKeyId: photographyEnv.PHOTOGRAPHY_AWS_ACCESS_KEY_ID,
+        secretAccessKey: photographyEnv.PHOTOGRAPHY_AWS_SECRET_ACCESS_KEY
+      }
+    : (photographyEnv.AWS_ACCESS_KEY_ID && photographyEnv.AWS_SECRET_ACCESS_KEY)
+      ? {
+          accessKeyId: photographyEnv.AWS_ACCESS_KEY_ID,
+          secretAccessKey: photographyEnv.AWS_SECRET_ACCESS_KEY
+        }
+      : (process.env.PHOTOGRAPHY_AWS_ACCESS_KEY_ID && process.env.PHOTOGRAPHY_AWS_SECRET_ACCESS_KEY)
+        ? {
+            accessKeyId: process.env.PHOTOGRAPHY_AWS_ACCESS_KEY_ID,
+            secretAccessKey: process.env.PHOTOGRAPHY_AWS_SECRET_ACCESS_KEY
+          }
+        : (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY)
+          ? {
+              accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+              secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+            }
+          : undefined;
 
 const MERITTO_SECRET = process.env.MERITTO_SECRET ||
   crypto.createHash('sha256').update((process.env.JWT_SECRET || 'default-secret-change-me') + '-meritto').digest('hex').slice(0, 32);
@@ -96,7 +122,10 @@ function parseFileSizeLimitMb(value, fallbackMb) {
 }
 
 const upload_mem = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
-const photographyMaxFileSizeMb = parseFileSizeLimitMb(process.env.MAX_FILE_SIZE_MB, 102400);
+const photographyMaxFileSizeMb = parseFileSizeLimitMb(
+  photographyEnv.PHOTOGRAPHY_MAX_FILE_SIZE_MB || photographyEnv.MAX_FILE_SIZE_MB || process.env.PHOTOGRAPHY_MAX_FILE_SIZE_MB || process.env.MAX_FILE_SIZE_MB,
+  102400
+);
 const photographyUpload = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, photographyTempDir),
@@ -108,7 +137,7 @@ const photographyUpload = multer({
   limits: { fileSize: photographyMaxFileSizeMb * 1024 * 1024 }
 });
 const photographyS3 = S3_BUCKET_NAME
-  ? new S3Client({ region: AWS_REGION, followRegionRedirects: true })
+  ? new S3Client({ region: AWS_REGION, followRegionRedirects: true, ...(photographyCredentials ? { credentials: photographyCredentials } : {}) })
   : null;
 
 function sanitizeFileBaseName(value) {
@@ -117,6 +146,28 @@ function sanitizeFileBaseName(value) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '') || 'file';
+}
+
+function sanitizeFolderSegment(value) {
+  return String(value || '')
+    .trim()
+    .replace(/\\/g, '/')
+    .split('/')
+    .filter((segment) => segment && segment !== '.')
+    .map((segment) => sanitizeFileBaseName(segment))
+    .filter(Boolean)
+    .join('/');
+}
+
+function buildPhotographyObjectKey(file, requestedName, relativePath) {
+  const extension = path.extname(file.originalname).toLowerCase();
+  const requestedBaseName = typeof requestedName === 'string' ? requestedName.trim() : '';
+  const safeBase = sanitizeFileBaseName(requestedBaseName || path.basename(file.originalname, extension));
+  const fileName = `${safeBase}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}${extension}`;
+  const relativeDir = sanitizeFolderSegment(path.posix.dirname(String(relativePath || '').replace(/\\/g, '/')));
+  return relativeDir && relativeDir !== '.'
+    ? `library/${relativeDir}/${fileName}`
+    : `library/${fileName}`;
 }
 
 function formatBytes(value) {
@@ -143,7 +194,7 @@ function ensurePhotographyS3Configured(res) {
 
   res.status(500).json({
     message: 'Photography S3 is not configured.',
-    details: 'Set S3_BUCKET_NAME, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and optionally AWS_REGION.'
+    details: 'Set photography/.env with S3_BUCKET_NAME, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and optionally AWS_REGION.'
   });
   return false;
 }
@@ -270,6 +321,7 @@ app.get('/api/photography/files', auth, photographyAccessOnly, async (_req, res)
         return {
           key,
           name,
+          relativePath: key.replace(/^library\//, ''),
           size,
           sizeLabel: formatBytes(size),
           lastModified: item.LastModified,
@@ -324,6 +376,11 @@ app.post('/api/photography/upload', auth, photographyAccessOnly, photographyUplo
     : req.body.names
       ? [req.body.names]
       : [];
+  const requestedPaths = Array.isArray(req.body.paths)
+    ? req.body.paths
+    : req.body.paths
+      ? [req.body.paths]
+      : [];
   const files = req.files ?? [];
 
   if (!files.length) {
@@ -343,10 +400,8 @@ app.post('/api/photography/upload', auth, photographyAccessOnly, photographyUplo
     const uploaded = [];
 
     for (const [index, file] of files.entries()) {
-      const extension = path.extname(file.originalname).toLowerCase();
-      const safeBase = sanitizeFileBaseName(requestedNames[index] || path.basename(file.originalname, extension));
-      const fileName = `${safeBase}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}${extension}`;
-      const key = `library/${fileName}`;
+      const key = buildPhotographyObjectKey(file, requestedNames[index], requestedPaths[index]);
+      const fileName = path.basename(key);
 
       await photographyS3.send(new PutObjectCommand({
         Bucket: S3_BUCKET_NAME,
@@ -360,6 +415,7 @@ app.post('/api/photography/upload', auth, photographyAccessOnly, photographyUplo
       uploaded.push({
         key,
         name: fileName,
+        relativePath: requestedPaths[index] || file.originalname,
         size: file.size,
         sizeLabel: formatBytes(file.size)
       });
@@ -367,6 +423,7 @@ app.post('/api/photography/upload', auth, photographyAccessOnly, photographyUplo
 
     res.status(201).json({ message: 'Files uploaded successfully.', uploaded });
   } catch (err) {
+    console.error('Photography upload failed:', err);
     await Promise.all(files.map(async (file) => {
       if (file.path) {
         await fs.promises.unlink(file.path).catch(() => {});
