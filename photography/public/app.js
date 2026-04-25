@@ -25,6 +25,7 @@ const libraryItemTemplate = document.querySelector("#library-item-template");
 let selectedFiles = [];
 let libraryFiles = [];
 const expandedFolderPaths = new Set([""]);
+const expandedLibraryPaths = new Set([""]);
 const activePreviewUrls = new Map();
 const folderVisibleCounts = new Map([["", 0]]);
 const INITIAL_FOLDER_FILE_RENDER_COUNT = 24;
@@ -238,6 +239,43 @@ function createSelectionTree(entries) {
   return root;
 }
 
+function createLibraryTree(files) {
+  const root = {
+    path: "",
+    name: "root",
+    folders: new Map(),
+    files: []
+  };
+
+  files.forEach((file) => {
+    const relativePath = String(file.relativePath || file.name || "").replace(/^\/+|\/+$/g, "");
+    const segments = relativePath.split("/").filter(Boolean);
+    const fileName = segments.pop() || file.name;
+    let currentNode = root;
+    let currentPath = "";
+
+    segments.forEach((segment) => {
+      currentPath = currentPath ? `${currentPath}/${segment}` : segment;
+      if (!currentNode.folders.has(segment)) {
+        currentNode.folders.set(segment, {
+          path: currentPath,
+          name: segment,
+          folders: new Map(),
+          files: []
+        });
+      }
+      currentNode = currentNode.folders.get(segment);
+    });
+
+    currentNode.files.push({
+      ...file,
+      displayName: fileName
+    });
+  });
+
+  return root;
+}
+
 function renderSelectedFileEntry(entry) {
   const fragment = selectedFileTemplate.content.cloneNode(true);
   const previewImage = fragment.querySelector(".selected-file-preview-image");
@@ -402,6 +440,115 @@ function renderSelectedFiles() {
   updateUploadProgressSummary();
 }
 
+function renderLibraryFileEntry(file) {
+  const fragment = libraryItemTemplate.content.cloneNode(true);
+  fragment.querySelector(".file-badge").textContent = getBadgeText(file.kind);
+  fragment.querySelector(".library-item-name").textContent = file.displayName || file.relativePath || file.name;
+  fragment.querySelector(".library-kind").textContent =
+    file.kind.charAt(0).toUpperCase() + file.kind.slice(1);
+  fragment.querySelector(".library-size").textContent = file.sizeLabel;
+  fragment.querySelector(".library-item-meta").textContent = formatDate(file.lastModified);
+
+  const downloadLink = fragment.querySelector(".download-link");
+  downloadLink.href = "#";
+  downloadLink.addEventListener("click", async (event) => {
+    event.preventDefault();
+    await downloadFile(file);
+  });
+
+  const deleteButton = fragment.querySelector(".delete-button");
+  deleteButton.addEventListener("click", async () => {
+    const firstConfirm = window.confirm(`Delete "${file.relativePath || file.name}" from the website library?`);
+    if (!firstConfirm) {
+      return;
+    }
+
+    const secondConfirm = window.confirm(
+      `Please confirm again. This will permanently delete "${file.relativePath || file.name}" from the photography folder.`
+    );
+    if (!secondConfirm) {
+      return;
+    }
+
+    formStatus.textContent = `Deleting ${file.relativePath || file.name}...`;
+
+    try {
+      const response = await authFetch("/api/photography/files", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ key: file.key })
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.details || data.message || "Delete failed.");
+      }
+
+      formStatus.textContent = data.message;
+      await fetchLibrary();
+    } catch (error) {
+      formStatus.textContent = error.message;
+    }
+  });
+
+  return fragment;
+}
+
+function renderLibraryTreeNode(node, level = 0) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "library-tree-node";
+
+  const sortedFolders = Array.from(node.folders.values()).sort((a, b) => a.name.localeCompare(b.name));
+  const sortedFiles = [...node.files].sort((a, b) => (a.displayName || a.relativePath).localeCompare(b.displayName || b.relativePath));
+
+  sortedFolders.forEach((childNode) => {
+    const folderStats = countTreeStats(childNode);
+    const folderElement = document.createElement("div");
+    folderElement.className = "library-folder";
+
+    const folderButton = document.createElement("button");
+    folderButton.type = "button";
+    folderButton.className = "library-folder-toggle";
+    folderButton.style.setProperty("--folder-level", String(level));
+    folderButton.innerHTML = `
+      <span class="library-folder-caret">${expandedLibraryPaths.has(childNode.path) ? "▾" : "▸"}</span>
+      <span class="library-folder-name">${childNode.name}</span>
+      <span class="library-folder-meta">${folderStats.fileCount} files${folderStats.folderCount ? ` • ${folderStats.folderCount} folders` : ""}</span>
+    `;
+    folderButton.addEventListener("click", () => {
+      if (expandedLibraryPaths.has(childNode.path)) {
+        expandedLibraryPaths.delete(childNode.path);
+      } else {
+        expandedLibraryPaths.add(childNode.path);
+      }
+      renderLibrary();
+    });
+
+    folderElement.appendChild(folderButton);
+
+    if (expandedLibraryPaths.has(childNode.path)) {
+      const childContent = document.createElement("div");
+      childContent.className = "library-folder-children";
+      childContent.appendChild(renderLibraryTreeNode(childNode, level + 1));
+      folderElement.appendChild(childContent);
+    }
+
+    wrapper.appendChild(folderElement);
+  });
+
+  sortedFiles.forEach((file) => {
+    const fileWrapper = document.createElement("div");
+    fileWrapper.className = "library-file-wrapper";
+    fileWrapper.style.setProperty("--file-level", String(level));
+    fileWrapper.appendChild(renderLibraryFileEntry(file));
+    wrapper.appendChild(fileWrapper);
+  });
+
+  return wrapper;
+}
+
 function renderLibrary() {
   const query = searchInput.value.trim().toLowerCase();
   const files = libraryFiles.filter((file) => {
@@ -415,62 +562,8 @@ function renderLibrary() {
   }
 
   libraryList.innerHTML = "";
-
-  files.forEach((file) => {
-    const fragment = libraryItemTemplate.content.cloneNode(true);
-    fragment.querySelector(".file-badge").textContent = getBadgeText(file.kind);
-    fragment.querySelector(".library-item-name").textContent = file.relativePath || file.name;
-    fragment.querySelector(".library-kind").textContent =
-      file.kind.charAt(0).toUpperCase() + file.kind.slice(1);
-    fragment.querySelector(".library-size").textContent = file.sizeLabel;
-    fragment.querySelector(".library-item-meta").textContent = formatDate(file.lastModified);
-
-    const downloadLink = fragment.querySelector(".download-link");
-    downloadLink.href = "#";
-    downloadLink.addEventListener("click", async (event) => {
-      event.preventDefault();
-      await downloadFile(file);
-    });
-
-    const deleteButton = fragment.querySelector(".delete-button");
-    deleteButton.addEventListener("click", async () => {
-      const firstConfirm = window.confirm(`Delete "${file.name}" from the website library?`);
-      if (!firstConfirm) {
-        return;
-      }
-
-      const secondConfirm = window.confirm(
-        `Please confirm again. This will permanently delete "${file.name}" from the photography folder.`
-      );
-      if (!secondConfirm) {
-        return;
-      }
-
-      formStatus.textContent = `Deleting ${file.name}...`;
-
-      try {
-        const response = await authFetch("/api/photography/files", {
-          method: "DELETE",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({ key: file.key })
-        });
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.details || data.message || "Delete failed.");
-        }
-
-        formStatus.textContent = data.message;
-        await fetchLibrary();
-      } catch (error) {
-        formStatus.textContent = error.message;
-      }
-    });
-
-    libraryList.appendChild(fragment);
-  });
+  const tree = createLibraryTree(files);
+  libraryList.appendChild(renderLibraryTreeNode(tree));
 }
 
 async function fetchHealth() {
