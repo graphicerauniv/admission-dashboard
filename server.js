@@ -1,4 +1,4 @@
-require('dotenv').config();
+const dotenv = require('dotenv');
 const express = require('express');
 const mongoose = require('mongoose');
 const multer = require('multer');
@@ -12,6 +12,9 @@ const crypto = require('crypto');
 const nodemailer = require('nodemailer'); // npm install nodemailer
 const XLSX = require('xlsx'); // npm install xlsx
 
+dotenv.config();
+dotenv.config({ path: path.join(__dirname, 'photography', '.env'), override: false });
+
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -19,12 +22,21 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const photographyPublicDir = path.join(__dirname, 'photography', 'public');
 const photographyUploadsDir = path.join(__dirname, 'photography', 'uploads');
+const photographyTempDir = path.join(photographyUploadsDir, '.tmp');
 fs.mkdirSync(photographyUploadsDir, { recursive: true });
+fs.mkdirSync(photographyTempDir, { recursive: true });
 app.use('/photography', express.static(photographyPublicDir));
+
+const { S3Client, PutObjectCommand, ListObjectsV2Command, GetObjectCommand, HeadBucketCommand, DeleteObjectCommand } =
+  require(path.join(__dirname, 'photography', 'node_modules', '@aws-sdk', 'client-s3'));
+const { getSignedUrl } =
+  require(path.join(__dirname, 'photography', 'node_modules', '@aws-sdk', 's3-request-presigner'));
 
 const JWT_SECRET = process.env.JWT_SECRET || 'default-secret-change-me';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@geu.ac.in';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Admin@123';
+const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
+const S3_BUCKET_NAME = process.env.S3_BUCKET_NAME || '';
 
 const MERITTO_SECRET = process.env.MERITTO_SECRET ||
   crypto.createHash('sha256').update((process.env.JWT_SECRET || 'default-secret-change-me') + '-meritto').digest('hex').slice(0, 32);
@@ -78,11 +90,26 @@ function photographyAccessOnly(req, res, next) {
   next();
 }
 
+function parseFileSizeLimitMb(value, fallbackMb) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallbackMb;
+}
+
 const upload_mem = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+const photographyMaxFileSizeMb = parseFileSizeLimitMb(process.env.MAX_FILE_SIZE_MB, 102400);
 const photographyUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 512 * 1024 * 1024 }
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, photographyTempDir),
+    filename: (_req, file, cb) => {
+      const extension = path.extname(file.originalname).toLowerCase();
+      cb(null, `${Date.now()}-${crypto.randomUUID()}${extension}`);
+    }
+  }),
+  limits: { fileSize: photographyMaxFileSizeMb * 1024 * 1024 }
 });
+const photographyS3 = S3_BUCKET_NAME
+  ? new S3Client({ region: AWS_REGION, followRegionRedirects: true })
+  : null;
 
 function sanitizeFileBaseName(value) {
   return String(value || '')
@@ -107,6 +134,39 @@ function derivePhotoKind(fileName, mimeType = '') {
   if (['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'].includes(ext)) return 'image';
   if (['.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v'].includes(ext)) return 'video';
   return 'file';
+}
+
+function ensurePhotographyS3Configured(res) {
+  if (photographyS3 && S3_BUCKET_NAME) {
+    return true;
+  }
+
+  res.status(500).json({
+    message: 'Photography S3 is not configured.',
+    details: 'Set S3_BUCKET_NAME, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and optionally AWS_REGION.'
+  });
+  return false;
+}
+
+async function listPhotographyObjects() {
+  const objects = [];
+  let continuationToken;
+
+  do {
+    const response = await photographyS3.send(new ListObjectsV2Command({
+      Bucket: S3_BUCKET_NAME,
+      Prefix: 'library/',
+      ContinuationToken: continuationToken
+    }));
+
+    if (response.Contents) {
+      objects.push(...response.Contents.filter((item) => item.Key && !item.Key.endsWith('/')));
+    }
+
+    continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
+  } while (continuationToken);
+
+  return objects;
 }
 
 // ─── Login ───
@@ -183,30 +243,40 @@ app.get('/api/photography/session', auth, photographyAccessOnly, async (req, res
 
 app.get('/api/photography/health', auth, photographyAccessOnly, async (_req, res) => {
   try {
-    res.json({ ok: true, folder: photographyUploadsDir });
+    if (!ensurePhotographyS3Configured(res)) {
+      return;
+    }
+
+    await photographyS3.send(new HeadBucketCommand({ Bucket: S3_BUCKET_NAME }));
+    res.json({ ok: true, bucket: S3_BUCKET_NAME, region: AWS_REGION });
   } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(500).json({ ok: false, message: 'Unable to connect to the configured S3 bucket.', details: err.message });
   }
 });
 
 app.get('/api/photography/files', auth, photographyAccessOnly, async (_req, res) => {
   try {
-    const entries = await fs.promises.readdir(photographyUploadsDir, { withFileTypes: true });
-    const files = await Promise.all(entries
-      .filter(entry => entry.isFile())
-      .map(async entry => {
-        const fullPath = path.join(photographyUploadsDir, entry.name);
-        const stats = await fs.promises.stat(fullPath);
+    if (!ensurePhotographyS3Configured(res)) {
+      return;
+    }
+
+    const objects = await listPhotographyObjects();
+    const files = objects
+      .sort((a, b) => new Date(b.LastModified || 0) - new Date(a.LastModified || 0))
+      .map((item) => {
+        const key = item.Key;
+        const name = path.basename(key);
+        const size = item.Size || 0;
         return {
-          key: entry.name,
-          name: entry.name,
-          size: stats.size,
-          sizeLabel: formatBytes(stats.size),
-          lastModified: stats.mtime,
-          kind: derivePhotoKind(entry.name),
-          downloadUrl: `/api/photography/files/${encodeURIComponent(entry.name)}/download`
+          key,
+          name,
+          size,
+          sizeLabel: formatBytes(size),
+          lastModified: item.LastModified,
+          kind: derivePhotoKind(name),
+          downloadUrl: `/api/photography/files/download?key=${encodeURIComponent(key)}`
         };
-      }));
+      });
 
     files.sort((a, b) => new Date(b.lastModified) - new Date(a.lastModified));
     const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
@@ -223,12 +293,26 @@ app.get('/api/photography/files', auth, photographyAccessOnly, async (_req, res)
   }
 });
 
-app.get('/api/photography/files/:key/download', auth, photographyAccessOnly, async (req, res) => {
+app.get('/api/photography/files/download', auth, photographyAccessOnly, async (req, res) => {
   try {
-    const fileName = path.basename(req.params.key);
-    const filePath = path.join(photographyUploadsDir, fileName);
-    await fs.promises.access(filePath, fs.constants.R_OK);
-    res.download(filePath, fileName);
+    if (!ensurePhotographyS3Configured(res)) {
+      return;
+    }
+
+    const key = typeof req.query.key === 'string' ? req.query.key : '';
+    if (!key) {
+      return res.status(400).json({ message: 'File key is required.' });
+    }
+    const signedUrl = await getSignedUrl(
+      photographyS3,
+      new GetObjectCommand({
+        Bucket: S3_BUCKET_NAME,
+        Key: key,
+        ResponseContentDisposition: `attachment; filename="${path.basename(key)}"`
+      }),
+      { expiresIn: 60 * 10 }
+    );
+    res.redirect(signedUrl);
   } catch (err) {
     res.status(404).json({ message: 'File not found.' });
   }
@@ -247,19 +331,47 @@ app.post('/api/photography/upload', auth, photographyAccessOnly, photographyUplo
   }
 
   try {
+    if (!ensurePhotographyS3Configured(res)) {
+      await Promise.all(files.map(async (file) => {
+        if (file.path) {
+          await fs.promises.unlink(file.path).catch(() => {});
+        }
+      }));
+      return;
+    }
+
     const uploaded = [];
 
     for (const [index, file] of files.entries()) {
       const extension = path.extname(file.originalname).toLowerCase();
       const safeBase = sanitizeFileBaseName(requestedNames[index] || path.basename(file.originalname, extension));
       const fileName = `${safeBase}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}${extension}`;
-      const targetPath = path.join(photographyUploadsDir, fileName);
-      await fs.promises.writeFile(targetPath, file.buffer);
-      uploaded.push({ key: fileName, name: fileName });
+      const key = `library/${fileName}`;
+
+      await photographyS3.send(new PutObjectCommand({
+        Bucket: S3_BUCKET_NAME,
+        Key: key,
+        Body: fs.createReadStream(file.path),
+        ContentType: file.mimetype || 'application/octet-stream'
+      }));
+
+      await fs.promises.unlink(file.path).catch(() => {});
+
+      uploaded.push({
+        key,
+        name: fileName,
+        size: file.size,
+        sizeLabel: formatBytes(file.size)
+      });
     }
 
     res.status(201).json({ message: 'Files uploaded successfully.', uploaded });
   } catch (err) {
+    await Promise.all(files.map(async (file) => {
+      if (file.path) {
+        await fs.promises.unlink(file.path).catch(() => {});
+      }
+    }));
     res.status(500).json({ message: 'Upload failed.', details: err.message });
   }
 });
@@ -271,9 +383,14 @@ app.delete('/api/photography/files', auth, photographyAccessOnly, async (req, re
   }
 
   try {
-    const fileName = path.basename(key);
-    const filePath = path.join(photographyUploadsDir, fileName);
-    await fs.promises.unlink(filePath);
+    if (!ensurePhotographyS3Configured(res)) {
+      return;
+    }
+
+    await photographyS3.send(new DeleteObjectCommand({
+      Bucket: S3_BUCKET_NAME,
+      Key: key
+    }));
     res.json({ message: 'File deleted successfully.' });
   } catch (err) {
     res.status(500).json({ message: 'Delete failed.', details: err.message });
@@ -1608,4 +1725,19 @@ app.get('/api/meritto/export', auth, adminOnly, async (req, res) => {
 app.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'public', 'index.html')); });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+app.use((error, _req, res, _next) => {
+  if (error instanceof multer.MulterError) {
+    return res.status(400).json({
+      message: 'Upload error.',
+      details:
+        error.code === 'LIMIT_FILE_SIZE'
+          ? `Each photography file can be up to ${photographyMaxFileSizeMb.toLocaleString()} MB.`
+          : error.message
+    });
+  }
+
+  return res.status(500).json({ error: error.message || 'Unexpected server error.' });
+});
+const server = app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+server.requestTimeout = 0;
+server.timeout = 0;

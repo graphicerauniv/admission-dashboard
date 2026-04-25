@@ -84,7 +84,7 @@
               <span class="upload-kicker">Upload here</span>
               <span class="upload-title">Choose files or drag them into this section</span>
               <span class="upload-subtitle">
-                Give every upload a custom name before it goes into the photography folder.
+                Select multiple photos or videos, rename them before upload, and monitor the live progress of large files.
               </span>
             </label>
 
@@ -102,6 +102,9 @@
                 <strong id="video-count">0</strong>
               </div>
               <button class="primary-button" type="submit">Upload to Folder</button>
+              <p id="upload-progress-summary" class="upload-progress-summary">
+                Large uploads supported up to 100 GB per file.
+              </p>
             </aside>
           </form>
 
@@ -139,6 +142,11 @@
         <div class="selected-file-meta">
           <strong class="selected-file-original"></strong>
           <span class="selected-file-size"></span>
+          <span class="selected-file-status"></span>
+          <div class="selected-file-progress">
+            <div class="selected-file-progress-bar"></div>
+          </div>
+          <span class="selected-file-progress-text"></span>
         </div>
         <label>
           <span>Custom name</span>

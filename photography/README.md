@@ -31,7 +31,7 @@ Optional settings:
 
 - `PORT`: local server port, defaults to `3000`
 - `HOST`: local bind address, defaults to `127.0.0.1`
-- `MAX_FILE_SIZE_MB`: max upload size per file, defaults to `512`
+- `MAX_FILE_SIZE_MB`: max upload size per file, defaults to `102400` for 100 GB uploads
 
 If you do not set `AWS_REGION`, the app starts with `us-east-1` and the AWS SDK follows S3 region redirects automatically. That lets you keep setup minimal, although setting the exact bucket region is still the most reliable option.
 
@@ -57,3 +57,4 @@ The AWS credentials used by this app should be allowed to:
 - Uploaded files are stored in the bucket under the `library/` prefix.
 - To avoid filename collisions, the app adds a unique ID to each uploaded file.
 - Downloads are served using short-lived signed URLs.
+- The browser supports selecting multiple files in one batch and shows live progress while each file uploads.

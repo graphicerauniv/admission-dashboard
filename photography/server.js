@@ -21,7 +21,7 @@ const {
   HOST = "127.0.0.1",
   AWS_REGION = "us-east-1",
   S3_BUCKET_NAME,
-  MAX_FILE_SIZE_MB = "512"
+  MAX_FILE_SIZE_MB = "102400"
 } = process.env;
 
 if (!S3_BUCKET_NAME) {
@@ -40,6 +40,11 @@ const s3 = new S3Client({
 });
 const app = express();
 
+function parseFileSizeLimitMb(value, fallbackMb) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallbackMb;
+}
+
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, uploadsDir),
   filename: (_req, file, cb) => {
@@ -51,7 +56,7 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage,
   limits: {
-    fileSize: Number(MAX_FILE_SIZE_MB) * 1024 * 1024
+    fileSize: parseFileSizeLimitMb(MAX_FILE_SIZE_MB, 102400) * 1024 * 1024
   }
 });
 
@@ -264,7 +269,10 @@ app.use((error, _req, res, _next) => {
   if (error instanceof multer.MulterError) {
     return res.status(400).json({
       message: "Upload error.",
-      details: error.message
+      details:
+        error.code === "LIMIT_FILE_SIZE"
+          ? `Each file can be up to ${parseFileSizeLimitMb(MAX_FILE_SIZE_MB, 102400).toLocaleString()} MB.`
+          : error.message
     });
   }
 
@@ -274,6 +282,8 @@ app.use((error, _req, res, _next) => {
   });
 });
 
-app.listen(Number(PORT), HOST, () => {
+const server = app.listen(Number(PORT), HOST, () => {
   console.log(`S3 library server running on http://${HOST}:${PORT}`);
 });
+server.requestTimeout = 0;
+server.timeout = 0;

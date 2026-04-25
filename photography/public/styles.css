@@ -290,6 +290,12 @@ body::before {
   gap: 14px;
 }
 
+.upload-progress-summary {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
 .selected-files,
 .library-list {
   display: grid;
@@ -321,6 +327,32 @@ body::before {
   display: block;
   font-size: 1.2rem;
   word-break: break-word;
+}
+
+.selected-file-meta {
+  display: grid;
+  gap: 8px;
+}
+
+.selected-file-status,
+.selected-file-progress-text {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.selected-file-progress {
+  overflow: hidden;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(42, 58, 46, 0.12);
+}
+
+.selected-file-progress-bar {
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #db8f5b, #2a5a46);
+  transition: width 180ms ease;
 }
 
 .selected-file label {
