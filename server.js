@@ -140,34 +140,20 @@ const photographyS3 = S3_BUCKET_NAME
   ? new S3Client({ region: AWS_REGION, followRegionRedirects: true, ...(photographyCredentials ? { credentials: photographyCredentials } : {}) })
   : null;
 
-function sanitizeFileBaseName(value) {
-  return String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '') || 'file';
-}
-
-function sanitizeFolderSegment(value) {
-  return String(value || '')
-    .trim()
+function normalizePhotographyRelativePath(file, relativePath) {
+  const fallbackName = path.basename(file.originalname);
+  const normalized = String(relativePath || fallbackName)
     .replace(/\\/g, '/')
     .split('/')
-    .filter((segment) => segment && segment !== '.')
-    .map((segment) => sanitizeFileBaseName(segment))
-    .filter(Boolean)
+    .map((segment) => segment.trim())
+    .filter((segment) => segment && segment !== '.' && segment !== '..')
     .join('/');
+
+  return normalized || fallbackName;
 }
 
-function buildPhotographyObjectKey(file, requestedName, relativePath) {
-  const extension = path.extname(file.originalname).toLowerCase();
-  const requestedBaseName = typeof requestedName === 'string' ? requestedName.trim() : '';
-  const safeBase = sanitizeFileBaseName(requestedBaseName || path.basename(file.originalname, extension));
-  const fileName = `${safeBase}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}${extension}`;
-  const relativeDir = sanitizeFolderSegment(path.posix.dirname(String(relativePath || '').replace(/\\/g, '/')));
-  return relativeDir && relativeDir !== '.'
-    ? `library/${relativeDir}/${fileName}`
-    : `library/${fileName}`;
+function buildPhotographyObjectKey(file, relativePath) {
+  return `library/${normalizePhotographyRelativePath(file, relativePath)}`;
 }
 
 function formatBytes(value) {
@@ -371,11 +357,6 @@ app.get('/api/photography/files/download', auth, photographyAccessOnly, async (r
 });
 
 app.post('/api/photography/upload', auth, photographyAccessOnly, photographyUpload.array('files'), async (req, res) => {
-  const requestedNames = Array.isArray(req.body.names)
-    ? req.body.names
-    : req.body.names
-      ? [req.body.names]
-      : [];
   const requestedPaths = Array.isArray(req.body.paths)
     ? req.body.paths
     : req.body.paths
@@ -400,7 +381,7 @@ app.post('/api/photography/upload', auth, photographyAccessOnly, photographyUplo
     const uploaded = [];
 
     for (const [index, file] of files.entries()) {
-      const key = buildPhotographyObjectKey(file, requestedNames[index], requestedPaths[index]);
+      const key = buildPhotographyObjectKey(file, requestedPaths[index]);
       const fileName = path.basename(key);
 
       await photographyS3.send(new PutObjectCommand({
@@ -415,7 +396,7 @@ app.post('/api/photography/upload', auth, photographyAccessOnly, photographyUplo
       uploaded.push({
         key,
         name: fileName,
-        relativePath: requestedPaths[index] || file.originalname,
+        relativePath: normalizePhotographyRelativePath(file, requestedPaths[index]),
         size: file.size,
         sizeLabel: formatBytes(file.size)
       });

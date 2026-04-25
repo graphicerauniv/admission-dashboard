@@ -187,11 +187,8 @@ function renderSelectedFiles() {
       `${formatBytes(entry.uploadedBytes)} of ${formatBytes(entry.file.size)} (${Math.round(entry.progress * 100)}%)`;
 
     const input = fragment.querySelector(".selected-file-name");
-    input.value = entry.customName;
-    input.disabled = entry.status === "uploading" || entry.status === "completed";
-    input.addEventListener("input", (event) => {
-      selectedFiles[index].customName = event.target.value;
-    });
+    input.value = entry.relativePath;
+    input.disabled = true;
 
     selectedFilesContainer.appendChild(fragment);
   });
@@ -341,10 +338,7 @@ uploadForm.addEventListener("submit", async (event) => {
   }
 
   const queuedEntries = selectedFiles.filter((entry) => entry.status !== "completed");
-  let completedNow = 0;
-  let failedNow = 0;
-
-  formStatus.textContent = `Uploading ${queuedEntries.length} file${queuedEntries.length === 1 ? "" : "s"} to the photography folder...`;
+  formStatus.textContent = `Uploading ${queuedEntries.length} item${queuedEntries.length === 1 ? "" : "s"} as one folder batch...`;
 
   try {
     for (const entry of queuedEntries) {
@@ -352,40 +346,48 @@ uploadForm.addEventListener("submit", async (event) => {
       entry.errorMessage = "";
       entry.uploadedBytes = 0;
       entry.progress = 0;
-      renderSelectedFiles();
-
-      try {
-        await uploadFile(entry);
-        entry.status = "completed";
-        entry.uploadedBytes = entry.file.size;
-        entry.progress = 1;
-        completedNow += 1;
-      } catch (error) {
-        entry.status = "error";
-        entry.errorMessage = error.message;
-        failedNow += 1;
-      }
-
-      renderSelectedFiles();
     }
+    renderSelectedFiles();
 
-    if (completedNow > 0) {
-      await fetchLibrary();
+    await uploadFilesBatch(queuedEntries);
+
+    for (const entry of queuedEntries) {
+      entry.status = "completed";
+      entry.uploadedBytes = entry.file.size;
+      entry.progress = 1;
     }
+    renderSelectedFiles();
 
-    formStatus.textContent =
-      failedNow > 0
-        ? `${completedNow} uploaded, ${failedNow} failed. You can retry the failed files.`
-        : `All ${completedNow} file${completedNow === 1 ? "" : "s"} uploaded successfully.`;
+    await fetchLibrary();
+
+    formStatus.textContent = `Folder batch uploaded successfully with ${queuedEntries.length} item${queuedEntries.length === 1 ? "" : "s"}.`;
 
     selectedFiles = selectedFiles.filter((entry) => entry.status === "error");
     renderSelectedFiles();
   } catch (error) {
+    for (const entry of queuedEntries) {
+      entry.status = "error";
+      entry.errorMessage = error.message;
+    }
+    renderSelectedFiles();
     formStatus.textContent = error.message;
   }
 });
 
-function uploadFile(entry) {
+function applyBatchProgress(entries, loadedBytes) {
+  let remaining = Math.max(0, loadedBytes);
+
+  entries.forEach((entry) => {
+    const currentLoaded = Math.min(entry.file.size, remaining);
+    entry.uploadedBytes = currentLoaded;
+    entry.progress = entry.file.size > 0 ? Math.min(currentLoaded / entry.file.size, 1) : 0;
+    remaining = Math.max(0, remaining - entry.file.size);
+  });
+
+  renderSelectedFiles();
+}
+
+function uploadFilesBatch(entries) {
   const token = getToken();
 
   if (!token) {
@@ -395,9 +397,10 @@ function uploadFile(entry) {
 
   return new Promise((resolve, reject) => {
     const formData = new FormData();
-    formData.append("files", entry.file);
-    formData.append("names", entry.customName.trim());
-    formData.append("paths", entry.relativePath);
+    entries.forEach((entry) => {
+      formData.append("files", entry.file);
+      formData.append("paths", entry.relativePath);
+    });
 
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "/api/photography/upload");
@@ -408,9 +411,9 @@ function uploadFile(entry) {
         return;
       }
 
-      entry.uploadedBytes = Math.min(event.loaded, entry.file.size);
-      entry.progress = Math.min(event.loaded / event.total, 1);
-      renderSelectedFiles();
+      const totalFileBytes = entries.reduce((sum, entry) => sum + entry.file.size, 0);
+      const payloadRatio = event.total > 0 ? event.loaded / event.total : 0;
+      applyBatchProgress(entries, totalFileBytes * payloadRatio);
     });
 
     xhr.addEventListener("load", () => {
