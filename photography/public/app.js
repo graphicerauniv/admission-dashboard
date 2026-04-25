@@ -26,6 +26,9 @@ let selectedFiles = [];
 let libraryFiles = [];
 const expandedFolderPaths = new Set([""]);
 const activePreviewUrls = new Map();
+const folderVisibleCounts = new Map([["", 0]]);
+const INITIAL_FOLDER_FILE_RENDER_COUNT = 24;
+const FOLDER_FILE_RENDER_STEP = 24;
 const MAX_BATCH_FILES = 10;
 const MAX_BATCH_BYTES = 20 * 1024 * 1024;
 const MAX_BATCH_RETRIES = 2;
@@ -33,6 +36,9 @@ const UPLOAD_CONCURRENCY = 3;
 const MULTIPART_THRESHOLD_BYTES = 100 * 1024 * 1024;
 const MULTIPART_PART_CONCURRENCY = 4;
 const MULTIPART_PART_RETRIES = 2;
+const MIN_UPLOAD_TIMEOUT_MS = 2 * 60 * 1000;
+const MAX_UPLOAD_TIMEOUT_MS = 15 * 60 * 1000;
+const UPLOAD_TIMEOUT_MIN_BYTES_PER_SECOND = 256 * 1024;
 
 function createSelectedFileEntry(file) {
   const relativePath = file.webkitRelativePath || file.name;
@@ -122,6 +128,11 @@ function getEntryKind(entry) {
 
 function shouldUseMultipart(entry) {
   return entry.file.size >= MULTIPART_THRESHOLD_BYTES;
+}
+
+function getUploadTimeoutMs(size) {
+  const computedTimeout = Math.ceil((size / UPLOAD_TIMEOUT_MIN_BYTES_PER_SECOND) * 1000) + 30 * 1000;
+  return Math.max(MIN_UPLOAD_TIMEOUT_MS, Math.min(MAX_UPLOAD_TIMEOUT_MS, computedTimeout));
 }
 
 function revokeAllActivePreviewUrls() {
@@ -287,12 +298,26 @@ function countTreeStats(node) {
   return { folderCount, fileCount };
 }
 
+function getVisibleFileCountForFolder(folderPath, totalFiles) {
+  if (totalFiles <= 0) {
+    return 0;
+  }
+
+  if (!folderVisibleCounts.has(folderPath)) {
+    folderVisibleCounts.set(folderPath, Math.min(INITIAL_FOLDER_FILE_RENDER_COUNT, totalFiles));
+  }
+
+  return Math.min(folderVisibleCounts.get(folderPath), totalFiles);
+}
+
 function renderSelectionTreeNode(node, level = 0) {
   const wrapper = document.createElement("div");
   wrapper.className = "selection-tree-node";
 
   const sortedFolders = Array.from(node.folders.values()).sort((a, b) => a.name.localeCompare(b.name));
   const sortedFiles = [...node.files].sort((a, b) => (a.displayName || a.relativePath).localeCompare(b.displayName || b.relativePath));
+  const visibleFileCount = getVisibleFileCountForFolder(node.path, sortedFiles.length);
+  const visibleFiles = sortedFiles.slice(0, visibleFileCount);
 
   sortedFolders.forEach((childNode) => {
     const folderStats = countTreeStats(childNode);
@@ -313,6 +338,7 @@ function renderSelectionTreeNode(node, level = 0) {
         expandedFolderPaths.delete(childNode.path);
       } else {
         expandedFolderPaths.add(childNode.path);
+        getVisibleFileCountForFolder(childNode.path, childNode.files.length);
       }
       renderSelectedFiles();
     });
@@ -329,13 +355,29 @@ function renderSelectionTreeNode(node, level = 0) {
     wrapper.appendChild(folderElement);
   });
 
-  sortedFiles.forEach((entry) => {
+  visibleFiles.forEach((entry) => {
     const fileWrapper = document.createElement("div");
     fileWrapper.className = "selection-file-wrapper";
     fileWrapper.style.setProperty("--file-level", String(level));
     fileWrapper.appendChild(renderSelectedFileEntry(entry));
     wrapper.appendChild(fileWrapper);
   });
+
+  if (visibleFileCount < sortedFiles.length) {
+    const loadMoreButton = document.createElement("button");
+    loadMoreButton.type = "button";
+    loadMoreButton.className = "selection-load-more";
+    loadMoreButton.style.setProperty("--file-level", String(level));
+    loadMoreButton.textContent = `Load more files (${sortedFiles.length - visibleFileCount} remaining)`;
+    loadMoreButton.addEventListener("click", () => {
+      folderVisibleCounts.set(
+        node.path,
+        Math.min(visibleFileCount + FOLDER_FILE_RENDER_STEP, sortedFiles.length)
+      );
+      renderSelectedFiles();
+    });
+    wrapper.appendChild(loadMoreButton);
+  }
 
   return wrapper;
 }
@@ -607,6 +649,15 @@ async function runBatchesWithConcurrency(items, worker, concurrency = UPLOAD_CON
 
 async function uploadDirectFileWithRetry(entry, attempt = 0) {
   try {
+    entry.retries = attempt;
+    entry.status = "uploading";
+    if (attempt > 0) {
+      entry.errorMessage = `Retrying upload (${attempt}/${MAX_BATCH_RETRIES})...`;
+      entry.uploadedBytes = 0;
+      entry.progress = 0;
+      renderSelectedFiles();
+    }
+
     const signedUpload = await initializeDirectUpload(entry);
     await uploadDirectFileToS3(entry, signedUpload);
     return {
@@ -651,6 +702,7 @@ function uploadDirectFileToS3(entry, signedUpload) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", signedUpload.signedUrl);
+    xhr.timeout = getUploadTimeoutMs(entry.file.size);
     xhr.setRequestHeader("Content-Type", entry.file.type || "application/octet-stream");
 
     xhr.upload.addEventListener("progress", (event) => {
@@ -677,6 +729,10 @@ function uploadDirectFileToS3(entry, signedUpload) {
 
     xhr.addEventListener("error", () => {
       reject(new Error("Direct upload failed because the S3 connection was interrupted."));
+    });
+
+    xhr.addEventListener("timeout", () => {
+      reject(new Error("Direct upload timed out before the file finished transferring."));
     });
 
     xhr.addEventListener("abort", () => {
@@ -753,6 +809,11 @@ async function uploadMultipartParts(entry, initializedUpload) {
 
 async function uploadMultipartPartWithRetry(entry, initializedUpload, partNumber, loadedParts, attempt = 0) {
   try {
+    if (attempt > 0) {
+      loadedParts.delete(partNumber);
+      updateMultipartEntryProgress(entry, loadedParts);
+    }
+
     return await uploadMultipartPart(entry, initializedUpload, partNumber, loadedParts);
   } catch (error) {
     if (attempt >= MULTIPART_PART_RETRIES) {
@@ -793,6 +854,7 @@ function putMultipartPart(entry, blob, signedUrl, partNumber, loadedParts) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", signedUrl);
+    xhr.timeout = getUploadTimeoutMs(blob.size);
     xhr.setRequestHeader("Content-Type", entry.file.type || "application/octet-stream");
 
     xhr.upload.addEventListener("progress", (event) => {
@@ -826,6 +888,10 @@ function putMultipartPart(entry, blob, signedUrl, partNumber, loadedParts) {
 
     xhr.addEventListener("error", () => {
       reject(new Error("Multipart upload failed while sending a part to S3."));
+    });
+
+    xhr.addEventListener("timeout", () => {
+      reject(new Error("Multipart upload timed out while sending a part to S3."));
     });
 
     xhr.addEventListener("abort", () => {

@@ -358,6 +358,18 @@ body::before {
   margin-left: calc((var(--file-level, 0) + 1) * 22px);
 }
 
+.selection-load-more {
+  min-height: 48px;
+  margin-left: calc((var(--file-level, 0) + 1) * 22px);
+  border: 1px dashed var(--line-strong);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.66);
+  color: var(--muted);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .empty-state {
   padding: 20px;
   border-radius: 24px;
@@ -577,6 +589,10 @@ input[type="search"] {
   }
 
   .selection-file-wrapper {
+    margin-left: 0;
+  }
+
+  .selection-load-more {
     margin-left: 0;
   }
 
