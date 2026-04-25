@@ -143,6 +143,11 @@
 
     <template id="selected-file-template">
       <div class="selected-file">
+        <div class="selected-file-preview-shell">
+          <img class="selected-file-preview-image" alt="" hidden />
+          <video class="selected-file-preview-video" muted playsinline preload="metadata" hidden></video>
+          <div class="selected-file-preview-fallback">FILE</div>
+        </div>
         <div class="selected-file-meta">
           <strong class="selected-file-original"></strong>
           <span class="selected-file-size"></span>

@@ -24,19 +24,24 @@ const libraryItemTemplate = document.querySelector("#library-item-template");
 
 let selectedFiles = [];
 let libraryFiles = [];
-const MAX_BATCH_FILES = 20;
-const MAX_BATCH_BYTES = 10 * 1024 * 1024;
+const MAX_BATCH_FILES = 5;
+const MAX_BATCH_BYTES = 5 * 1024 * 1024;
+const MAX_BATCH_RETRIES = 2;
 
 function createSelectedFileEntry(file) {
   const relativePath = file.webkitRelativePath || file.name;
   return {
     file,
     relativePath,
-    customName: file.name.replace(/\.[^.]+$/, ""),
+    previewUrl:
+      file.type.startsWith("image/") || file.type.startsWith("video/")
+        ? URL.createObjectURL(file)
+        : "",
     status: "queued",
     uploadedBytes: 0,
     progress: 0,
-    errorMessage: ""
+    errorMessage: "",
+    retries: 0
   };
 }
 
@@ -107,6 +112,21 @@ function getBadgeText(kind) {
   return "FILE";
 }
 
+function getEntryKind(entry) {
+  if (entry.file.type.startsWith("image/")) return "image";
+  if (entry.file.type.startsWith("video/")) return "video";
+  return "file";
+}
+
+function revokePreviewUrls(entries) {
+  entries.forEach((entry) => {
+    if (entry.previewUrl) {
+      URL.revokeObjectURL(entry.previewUrl);
+      entry.previewUrl = "";
+    }
+  });
+}
+
 async function downloadFile(file) {
   formStatus.textContent = `Preparing ${file.name}...`;
 
@@ -171,6 +191,24 @@ function renderSelectedFiles() {
 
   selectedFiles.forEach((entry, index) => {
     const fragment = selectedFileTemplate.content.cloneNode(true);
+    const previewImage = fragment.querySelector(".selected-file-preview-image");
+    const previewVideo = fragment.querySelector(".selected-file-preview-video");
+    const previewFallback = fragment.querySelector(".selected-file-preview-fallback");
+    const entryKind = getEntryKind(entry);
+
+    if (entryKind === "image" && entry.previewUrl) {
+      previewImage.src = entry.previewUrl;
+      previewImage.hidden = false;
+      previewFallback.hidden = true;
+    } else if (entryKind === "video" && entry.previewUrl) {
+      previewVideo.src = entry.previewUrl;
+      previewVideo.hidden = false;
+      previewFallback.hidden = true;
+      previewFallback.textContent = "VIDEO";
+    } else {
+      previewFallback.textContent = getBadgeText(entryKind);
+    }
+
     fragment.querySelector(".selected-file-original").textContent = entry.relativePath;
     fragment.querySelector(".selected-file-size").textContent = formatBytes(entry.file.size);
     fragment.querySelector(".selected-file-status").textContent =
@@ -342,6 +380,7 @@ uploadForm.addEventListener("submit", async (event) => {
   const queuedEntries = selectedFiles.filter((entry) => entry.status !== "completed");
   const batches = createUploadBatches(queuedEntries);
   let uploadedCount = 0;
+  const failedEntries = [];
 
   formStatus.textContent =
     `Uploading ${queuedEntries.length} item${queuedEntries.length === 1 ? "" : "s"} in ` +
@@ -361,22 +400,33 @@ uploadForm.addEventListener("submit", async (event) => {
         `Uploading folder batch ${batchIndex + 1} of ${batches.length} ` +
         `(${uploadedCount}/${queuedEntries.length} items finished)...`;
 
-      await uploadFilesBatch(batchEntries);
+      const result = await uploadBatchWithRecovery(batchEntries);
 
-      for (const entry of batchEntries) {
+      for (const entry of result.uploadedEntries) {
         entry.status = "completed";
         entry.uploadedBytes = entry.file.size;
         entry.progress = 1;
         uploadedCount += 1;
       }
+
+      for (const failure of result.failedEntries) {
+        failure.entry.status = "error";
+        failure.entry.progress = 0;
+        failure.entry.uploadedBytes = 0;
+        failure.entry.errorMessage = failure.error.message;
+        failedEntries.push(failure.entry);
+      }
+
       renderSelectedFiles();
     }
 
     await fetchLibrary();
 
-    formStatus.textContent =
-      `Folder uploaded successfully with ${queuedEntries.length} item${queuedEntries.length === 1 ? "" : "s"}.`;
+    formStatus.textContent = failedEntries.length
+      ? `${uploadedCount} uploaded, ${failedEntries.length} failed. Failed files stayed in the queue for retry.`
+      : `Folder uploaded successfully with ${queuedEntries.length} item${queuedEntries.length === 1 ? "" : "s"}.`;
 
+    revokePreviewUrls(selectedFiles.filter((entry) => entry.status === "completed"));
     selectedFiles = selectedFiles.filter((entry) => entry.status === "error");
     renderSelectedFiles();
   } catch (error) {
@@ -411,6 +461,19 @@ function createUploadBatches(entries) {
   let currentBatchBytes = 0;
 
   entries.forEach((entry) => {
+    const isVideo = getEntryKind(entry) === "video";
+    const isOversized = entry.file.size > MAX_BATCH_BYTES;
+
+    if (isVideo || isOversized) {
+      if (currentBatch.length) {
+        batches.push(currentBatch);
+        currentBatch = [];
+        currentBatchBytes = 0;
+      }
+      batches.push([entry]);
+      return;
+    }
+
     const wouldExceedFileLimit = currentBatch.length >= MAX_BATCH_FILES;
     const wouldExceedByteLimit =
       currentBatch.length > 0 && currentBatchBytes + entry.file.size > MAX_BATCH_BYTES;
@@ -430,6 +493,45 @@ function createUploadBatches(entries) {
   }
 
   return batches;
+}
+
+async function uploadBatchWithRecovery(entries, attempt = 0) {
+  try {
+    await uploadFilesBatch(entries);
+    return {
+      uploadedEntries: entries,
+      failedEntries: []
+    };
+  } catch (error) {
+    const shouldRetry = attempt < MAX_BATCH_RETRIES;
+
+    if (shouldRetry) {
+      await wait(600 * (attempt + 1));
+      return uploadBatchWithRecovery(entries, attempt + 1);
+    }
+
+    if (entries.length === 1) {
+      return {
+        uploadedEntries: [],
+        failedEntries: [{ entry: entries[0], error }]
+      };
+    }
+
+    const midpoint = Math.ceil(entries.length / 2);
+    const leftResult = await uploadBatchWithRecovery(entries.slice(0, midpoint));
+    const rightResult = await uploadBatchWithRecovery(entries.slice(midpoint));
+
+    return {
+      uploadedEntries: [...leftResult.uploadedEntries, ...rightResult.uploadedEntries],
+      failedEntries: [...leftResult.failedEntries, ...rightResult.failedEntries]
+    };
+  }
+}
+
+function wait(ms) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
 }
 
 function uploadFilesBatch(entries) {
