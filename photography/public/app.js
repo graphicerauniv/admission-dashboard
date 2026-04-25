@@ -24,6 +24,8 @@ const libraryItemTemplate = document.querySelector("#library-item-template");
 
 let selectedFiles = [];
 let libraryFiles = [];
+const MAX_BATCH_FILES = 100;
+const MAX_BATCH_BYTES = 50 * 1024 * 1024;
 
 function createSelectedFileEntry(file) {
   const relativePath = file.webkitRelativePath || file.name;
@@ -338,7 +340,12 @@ uploadForm.addEventListener("submit", async (event) => {
   }
 
   const queuedEntries = selectedFiles.filter((entry) => entry.status !== "completed");
-  formStatus.textContent = `Uploading ${queuedEntries.length} item${queuedEntries.length === 1 ? "" : "s"} as one folder batch...`;
+  const batches = createUploadBatches(queuedEntries);
+  let uploadedCount = 0;
+
+  formStatus.textContent =
+    `Uploading ${queuedEntries.length} item${queuedEntries.length === 1 ? "" : "s"} in ` +
+    `${batches.length} folder batch${batches.length === 1 ? "" : "es"}...`;
 
   try {
     for (const entry of queuedEntries) {
@@ -349,28 +356,39 @@ uploadForm.addEventListener("submit", async (event) => {
     }
     renderSelectedFiles();
 
-    await uploadFilesBatch(queuedEntries);
+    for (const [batchIndex, batchEntries] of batches.entries()) {
+      formStatus.textContent =
+        `Uploading folder batch ${batchIndex + 1} of ${batches.length} ` +
+        `(${uploadedCount}/${queuedEntries.length} items finished)...`;
 
-    for (const entry of queuedEntries) {
-      entry.status = "completed";
-      entry.uploadedBytes = entry.file.size;
-      entry.progress = 1;
+      await uploadFilesBatch(batchEntries);
+
+      for (const entry of batchEntries) {
+        entry.status = "completed";
+        entry.uploadedBytes = entry.file.size;
+        entry.progress = 1;
+        uploadedCount += 1;
+      }
+      renderSelectedFiles();
     }
-    renderSelectedFiles();
 
     await fetchLibrary();
 
-    formStatus.textContent = `Folder batch uploaded successfully with ${queuedEntries.length} item${queuedEntries.length === 1 ? "" : "s"}.`;
+    formStatus.textContent =
+      `Folder uploaded successfully with ${queuedEntries.length} item${queuedEntries.length === 1 ? "" : "s"}.`;
 
     selectedFiles = selectedFiles.filter((entry) => entry.status === "error");
     renderSelectedFiles();
   } catch (error) {
-    for (const entry of queuedEntries) {
+    for (const entry of queuedEntries.filter((item) => item.status !== "completed")) {
       entry.status = "error";
       entry.errorMessage = error.message;
     }
     renderSelectedFiles();
-    formStatus.textContent = error.message;
+    formStatus.textContent =
+      uploadedCount > 0
+        ? `${uploadedCount} uploaded before the connection failed. ${error.message}`
+        : error.message;
   }
 });
 
@@ -385,6 +403,33 @@ function applyBatchProgress(entries, loadedBytes) {
   });
 
   renderSelectedFiles();
+}
+
+function createUploadBatches(entries) {
+  const batches = [];
+  let currentBatch = [];
+  let currentBatchBytes = 0;
+
+  entries.forEach((entry) => {
+    const wouldExceedFileLimit = currentBatch.length >= MAX_BATCH_FILES;
+    const wouldExceedByteLimit =
+      currentBatch.length > 0 && currentBatchBytes + entry.file.size > MAX_BATCH_BYTES;
+
+    if (wouldExceedFileLimit || wouldExceedByteLimit) {
+      batches.push(currentBatch);
+      currentBatch = [];
+      currentBatchBytes = 0;
+    }
+
+    currentBatch.push(entry);
+    currentBatchBytes += entry.file.size;
+  });
+
+  if (currentBatch.length) {
+    batches.push(currentBatch);
+  }
+
+  return batches;
 }
 
 function uploadFilesBatch(entries) {
