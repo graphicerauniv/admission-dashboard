@@ -665,6 +665,20 @@ async function uploadDirectFileWithRetry(entry, attempt = 0) {
       failedEntries: []
     };
   } catch (error) {
+    if (shouldFallbackToServerUpload(error)) {
+      try {
+        entry.errorMessage = "Browser-to-S3 upload failed, retrying through the server...";
+        renderSelectedFiles();
+        await uploadDirectFileViaServer(entry);
+        return {
+          uploadedEntries: [entry],
+          failedEntries: []
+        };
+      } catch (relayError) {
+        error = relayError;
+      }
+    }
+
     if (attempt >= MAX_BATCH_RETRIES) {
       return {
         uploadedEntries: [],
@@ -740,6 +754,91 @@ function uploadDirectFileToS3(entry, signedUpload) {
     });
 
     xhr.send(entry.file);
+  });
+}
+
+function shouldFallbackToServerUpload(error) {
+  const message = String(error?.message || "").toLowerCase();
+  return (
+    message.includes("connection was interrupted") ||
+    message.includes("timed out") ||
+    message.includes("failed while sending the file to s3")
+  );
+}
+
+function uploadDirectFileViaServer(entry) {
+  return new Promise((resolve, reject) => {
+    const token = getToken();
+    if (!token) {
+      redirectToLogin();
+      reject(new Error("Login required."));
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("files", entry.file, entry.file.name);
+    formData.append("paths", entry.relativePath);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/photography/upload");
+    xhr.timeout = getUploadTimeoutMs(entry.file.size);
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+
+    xhr.upload.addEventListener("progress", (event) => {
+      if (!event.lengthComputable) {
+        return;
+      }
+
+      entry.uploadedBytes = Math.min(event.loaded, entry.file.size);
+      entry.progress = entry.file.size > 0 ? Math.min(entry.uploadedBytes / entry.file.size, 1) : 0;
+      renderSelectedFiles();
+    });
+
+    xhr.addEventListener("load", () => {
+      let responseData = null;
+
+      try {
+        responseData = xhr.responseText ? JSON.parse(xhr.responseText) : null;
+      } catch (_error) {
+        responseData = null;
+      }
+
+      if (xhr.status === 401 || xhr.status === 403) {
+        redirectToLogin();
+        reject(new Error("Your session has expired."));
+        return;
+      }
+
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(
+          new Error(
+            responseData?.details ||
+            responseData?.message ||
+            "Fallback upload through the server failed."
+          )
+        );
+        return;
+      }
+
+      entry.uploadedBytes = entry.file.size;
+      entry.progress = 1;
+      renderSelectedFiles();
+      resolve(responseData);
+    });
+
+    xhr.addEventListener("error", () => {
+      reject(new Error("Fallback upload through the server failed because the connection was interrupted."));
+    });
+
+    xhr.addEventListener("timeout", () => {
+      reject(new Error("Fallback upload through the server timed out before the file finished transferring."));
+    });
+
+    xhr.addEventListener("abort", () => {
+      reject(new Error("Fallback upload through the server was cancelled."));
+    });
+
+    xhr.send(formData);
   });
 }
 
