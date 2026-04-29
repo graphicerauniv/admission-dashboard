@@ -1072,11 +1072,8 @@ app.post('/api/email-settings', auth, adminOnly, async (req, res) => {
 
 // ─── Campus query helpers ───
 function campusMatchQuery(campusCode) {
-  if (!campusCode || campusCode === 'GEHU') {
-    const re = { $regex: /^GEHU/ };
-    return { $or: [{ registeredCenter: re }, { admittedCenter: re }, { campus: re }] };
-  }
-  return { $or: [{ registeredCenter: campusCode }, { admittedCenter: campusCode }, { campus: campusCode }] };
+  if (!campusCode) return {};
+  return campusFilterQuery(campusCode, ['registeredCenter', 'admittedCenter', 'campus']);
 }
 
 // ─── Helper: build report data ───
@@ -1127,6 +1124,7 @@ function buildEmailHTML(years, campuses, results) {
   }[c] || c);
 
   const showCampuses = campuses;
+  const showCombined2026Total = years.includes(2026) && showCampuses.includes('GEHU') && showCampuses.includes('GEU');
 
   function yearTotal(year, type) {
     return showCampuses.reduce((sum, campus) => sum + (results[year]?.[campus]?.[type] || 0), 0);
@@ -1139,6 +1137,9 @@ function buildEmailHTML(years, campuses, results) {
     const bg = i % 2 === 0 ? '#1e3a5f' : '#1a4731';
     headerRow1 += `<th colspan="${years.length}" style="padding:12px 16px;background:${bg};color:white;font-size:13px;font-weight:800;text-align:center;border:1px solid #334155;letter-spacing:0.5px;">${campusLabel(campus)}</th>`;
   });
+  if (showCombined2026Total) {
+    headerRow1 += `<th colspan="1" style="padding:12px 16px;background:#5b21b6;color:white;font-size:13px;font-weight:800;text-align:center;border:1px solid #334155;letter-spacing:0.5px;">Total 2026 GEHU + GEU</th>`;
+  }
 
   let headerRow2 = `<th style="padding:9px 16px;background:#1e293b;color:#94a3b8;font-size:11px;font-weight:700;border:1px solid #334155;"></th>`;
   showCampuses.forEach(() => {
@@ -1146,6 +1147,9 @@ function buildEmailHTML(years, campuses, results) {
       headerRow2 += `<th style="padding:9px 10px;background:#1e293b;color:#e2e8f0;font-size:11px;font-weight:700;text-align:center;border:1px solid #334155;text-transform:uppercase;letter-spacing:0.4px;">${y}</th>`;
     });
   });
+  if (showCombined2026Total) {
+    headerRow2 += `<th style="padding:9px 10px;background:#1e293b;color:#e2e8f0;font-size:11px;font-weight:700;text-align:center;border:1px solid #334155;text-transform:uppercase;letter-spacing:0.4px;">2026</th>`;
+  }
 
   const rows = [
     { label: 'Registration', type: 'reg', color: '#d97706', bgColor: '#451a03' },
@@ -1163,6 +1167,10 @@ function buildEmailHTML(years, campuses, results) {
         tds += `<td style="padding:14px 10px;text-align:center;font-size:13px;font-weight:${val > 0 ? '700' : '400'};color:${val > 0 ? row.color : '#94a3b8'};background:${rowBg};border:1px solid #e2e8f0;">${val > 0 ? val : '-'}</td>`;
       });
     });
+    if (showCombined2026Total) {
+      const combined2026 = (results[2026]?.GEHU?.[row.type] || 0) + (results[2026]?.GEU?.[row.type] || 0);
+      tds += `<td style="padding:14px 10px;text-align:center;font-size:13px;font-weight:${combined2026 > 0 ? '700' : '400'};color:${combined2026 > 0 ? row.color : '#94a3b8'};background:${rowBg};border:1px solid #e2e8f0;">${combined2026 > 0 ? combined2026 : '-'}</td>`;
+    }
 
     dataRows += `<tr>${tds}</tr>`;
   });
@@ -1360,10 +1368,31 @@ function normalizeCampus(raw) {
   return raw.trim();
 }
 
+function campusFieldCondition(field, rawCampus) {
+  const campusCode = normalizeCampus(rawCampus);
+  if (!campusCode) return null;
+  if (campusCode === 'GEHU') return { [field]: { $regex: /^GEHU/i } };
+
+  const aliasPatterns = {
+    GEU: /^(GEU|GEU[\s-]*DEHRADUN)$/i,
+    GEHUDDN: /^(GEHUDDN|GEHU[\s-]*DEHRADUN)$/i,
+    GEHUHLD: /^(GEHUHLD|GEHU[\s-]*HALDWANI)$/i,
+    GEHUBTL: /^(GEHUBTL|GEHU[\s-]*BHIMTAL)$/i
+  };
+
+  return { [field]: aliasPatterns[campusCode] || new RegExp(`^${campusCode}$`, 'i') };
+}
+
+function campusFilterQuery(rawCampus, fields = ['enquiredCenter', 'registeredCenter', 'admittedCenter', 'campus']) {
+  const conditions = fields.map(field => campusFieldCondition(field, rawCampus)).filter(Boolean);
+  return conditions.length ? { $or: conditions } : {};
+}
+
 function displayCampus(code) {
   if (!code) return '';
+  const normalized = normalizeCampus(code);
   const map = { 'GEU': 'GEU', 'GEHUDDN': 'GEHU - DEHRADUN', 'GEHUHLD': 'GEHU - HALDWANI', 'GEHUBTL': 'GEHU - BHIMTAL', 'GEHU': 'GEHU' };
-  return map[code] || code;
+  return map[normalized] || code;
 }
 
 // ─── Upload CSV ───
@@ -1394,6 +1423,10 @@ app.post('/api/upload', auth, adminOnly, upload_mem.single('csvFile'), async (re
           if (!enquiredCenter && singleCampus) enquiredCenter = singleCampus;
           if (!registeredCenter && singleCampus) registeredCenter = singleCampus;
           if (!admittedCenter && singleCampus) admittedCenter = singleCampus;
+          const normalizedCampus = normalizeCampus(singleCampus);
+          const normalizedEnquiredCenter = normalizeCampus(enquiredCenter);
+          const normalizedRegisteredCenter = normalizeCampus(registeredCenter);
+          const normalizedAdmittedCenter = normalizeCampus(admittedCenter);
 
           const dateOfEnquiry = get('Date of Enquiry'), dateOfRegistration = get('Date of Registration'), dateOfAdmission = get('Date of Admission');
 
@@ -1408,7 +1441,10 @@ app.post('/api/upload', auth, adminOnly, upload_mem.single('csvFile'), async (re
             motherName: get('Mother name', 'Mother Name', 'Mother', 'MotherName'),
             category: get('Category'), intake: get('Intake', 'Year'),
             applicationStatus: get('Application Status', 'ApplicationStatus', 'Status'),
-            campus: singleCampus, enquiredCenter, registeredCenter, admittedCenter,
+            campus: normalizedCampus || singleCampus,
+            enquiredCenter: normalizedEnquiredCenter || enquiredCenter,
+            registeredCenter: normalizedRegisteredCenter || registeredCenter,
+            admittedCenter: normalizedAdmittedCenter || admittedCenter,
             dateOfEnquiry, dateOfRegistration, dateOfAdmission,
             enquiryDateParsed: parseDate(dateOfEnquiry),
             registrationDateParsed: parseDate(dateOfRegistration),
@@ -1475,13 +1511,7 @@ function modeCourseQuery(mode) {
 function buildDateFilter(dateField, start, end, extra) {
   const q = { [dateField]: { $gte: start, $lte: end } };
   if (extra.campus) {
-    const campusCode = normalizeCampus(extra.campus);
-    if (campusCode === 'GEHU') {
-      const gehuRe = { $regex: /^GEHU/ };
-      q.$or = [{ enquiredCenter: gehuRe }, { registeredCenter: gehuRe }, { admittedCenter: gehuRe }, { campus: gehuRe }];
-    } else {
-      q.$or = [{ enquiredCenter: campusCode }, { registeredCenter: campusCode }, { admittedCenter: campusCode }, { campus: campusCode }];
-    }
+    Object.assign(q, campusFilterQuery(extra.campus));
   }
   if (extra.course) q.courseName = extra.course;
   if (extra.mode) {
@@ -1876,10 +1906,14 @@ app.post('/api/meritto/webhook', async (req, res) => {
 
       const email = get(item, 'email', 'email_id', 'emailId').toLowerCase();
       const mobile = get(item, 'mobile', 'phone', 'contact', 'mobile_number', 'phone_number');
-      const campus = get(item, 'campus', 'center', 'centre', 'campus_name', 'center_name');
-      const enquiredCenter = get(item, 'enquired_center', 'enquiry_center', 'enquiredCenter') || campus;
-      const registeredCenter = get(item, 'registered_center', 'registeredCenter') || campus;
-      const admittedCenter = get(item, 'admitted_center', 'admittedCenter') || campus;
+      const campusRaw = get(item, 'campus', 'center', 'centre', 'campus_name', 'center_name');
+      const enquiredCenterRaw = get(item, 'enquired_center', 'enquiry_center', 'enquiredCenter') || campusRaw;
+      const registeredCenterRaw = get(item, 'registered_center', 'registeredCenter') || campusRaw;
+      const admittedCenterRaw = get(item, 'admitted_center', 'admittedCenter') || campusRaw;
+      const campus = normalizeCampus(campusRaw) || campusRaw;
+      const enquiredCenter = normalizeCampus(enquiredCenterRaw) || enquiredCenterRaw;
+      const registeredCenter = normalizeCampus(registeredCenterRaw) || registeredCenterRaw;
+      const admittedCenter = normalizeCampus(admittedCenterRaw) || admittedCenterRaw;
       const dateOfEnquiry = get(item, 'date_of_enquiry', 'enquiry_date', 'enquiryDate', 'lead_date', 'created_at', 'createdAt');
       const dateOfRegistration = get(item, 'date_of_registration', 'registration_date', 'registrationDate');
       const dateOfAdmission = get(item, 'date_of_admission', 'admission_date', 'admissionDate');
