@@ -1117,6 +1117,7 @@ async function buildReport(years, campuses, mode) {
 function buildEmailHTML(years, campuses, results) {
   const today = new Date();
   const dateStr = today.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' });
+  const primaryYear = years.includes(2026) ? 2026 : years[0];
 
   const campusLabel = c => ({
     'GEU': 'GEU', 'GEHU': 'GEHU', 'GEHUDDN': 'GEHU-DDN',
@@ -1131,24 +1132,27 @@ function buildEmailHTML(years, campuses, results) {
   }
 
   const campusSummary = showCampuses.map(campusLabel).join(' and ');
+  const campusBodyBg = campus => (campus === 'GEU' ? '#c6c6c6' : '#c6dbef');
+  const yearHeaderBg = year => (year === 2026 ? '#d8d6f1' : '#f6dcc8');
+  const total2026Bg = '#d8d6f1';
 
-  let headerRow1 = `<th style="padding:12px 16px;background:#0f172a;color:#e2e8f0;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;border:1px solid #334155;text-align:left;">Status</th>`;
+  let headerRow1 = `<th style="padding:18px 24px;background:#c9ddc8;color:#000000;font-size:18px;font-weight:800;border:1px solid #a8a8a8;text-align:left;">Status</th>`;
   showCampuses.forEach((campus, i) => {
-    const bg = i % 2 === 0 ? '#1e3a5f' : '#1a4731';
-    headerRow1 += `<th colspan="${years.length}" style="padding:12px 16px;background:${bg};color:white;font-size:13px;font-weight:800;text-align:center;border:1px solid #334155;letter-spacing:0.5px;">${campusLabel(campus)}</th>`;
+    const bg = '#c9ddc8';
+    headerRow1 += `<th colspan="${years.length}" style="padding:18px 16px;background:${bg};color:#000000;font-size:18px;font-weight:800;text-align:center;border:1px solid #a8a8a8;letter-spacing:0.2px;">${campusLabel(campus)}</th>`;
   });
   if (showCombined2026Total) {
-    headerRow1 += `<th colspan="1" style="padding:12px 16px;background:#5b21b6;color:white;font-size:13px;font-weight:800;text-align:center;border:1px solid #334155;letter-spacing:0.5px;">Total 2026 GEHU + GEU</th>`;
+    headerRow1 += `<th colspan="1" style="padding:18px 16px;background:${total2026Bg};color:#000000;font-size:18px;font-weight:800;text-align:center;border:1px solid #a8a8a8;letter-spacing:0.2px;">Total 2026</th>`;
   }
 
-  let headerRow2 = `<th style="padding:9px 16px;background:#1e293b;color:#94a3b8;font-size:11px;font-weight:700;border:1px solid #334155;"></th>`;
+  let headerRow2 = `<th style="padding:14px 16px;background:#f7efc9;color:#000000;font-size:14px;font-weight:700;border:1px solid #a8a8a8;"></th>`;
   showCampuses.forEach(() => {
     years.forEach(y => {
-      headerRow2 += `<th style="padding:9px 10px;background:#1e293b;color:#e2e8f0;font-size:11px;font-weight:700;text-align:center;border:1px solid #334155;text-transform:uppercase;letter-spacing:0.4px;">${y}</th>`;
+      headerRow2 += `<th style="padding:14px 10px;background:${yearHeaderBg(y)};color:#000000;font-size:14px;font-weight:800;text-align:center;border:1px solid #a8a8a8;">${y}</th>`;
     });
   });
   if (showCombined2026Total) {
-    headerRow2 += `<th style="padding:9px 10px;background:#1e293b;color:#e2e8f0;font-size:11px;font-weight:700;text-align:center;border:1px solid #334155;text-transform:uppercase;letter-spacing:0.4px;">2026</th>`;
+    headerRow2 += `<th style="padding:14px 10px;background:${total2026Bg};color:#000000;font-size:14px;font-weight:800;text-align:center;border:1px solid #a8a8a8;">2026</th>`;
   }
 
   const rows = [
@@ -1157,19 +1161,18 @@ function buildEmailHTML(years, campuses, results) {
   ];
 
   let dataRows = '';
-  rows.forEach((row, rowIdx) => {
-    const rowBg = rowIdx % 2 === 0 ? '#ffffff' : '#f8fafc';
-    let tds = `<td style="padding:14px 16px;font-weight:700;font-size:13px;color:#0f172a;background:${rowBg};border:1px solid #e2e8f0;">${row.label}</td>`;
+  rows.forEach(row => {
+    let tds = `<td style="padding:20px 24px;font-weight:800;font-size:18px;color:#000000;background:#f7efc9;border:1px solid #a8a8a8;">${row.label}</td>`;
 
     showCampuses.forEach(campus => {
       years.forEach(y => {
         const val = results[y]?.[campus]?.[row.type] || 0;
-        tds += `<td style="padding:14px 10px;text-align:center;font-size:13px;font-weight:${val > 0 ? '700' : '400'};color:${val > 0 ? row.color : '#94a3b8'};background:${rowBg};border:1px solid #e2e8f0;">${val > 0 ? val : '-'}</td>`;
+        tds += `<td style="padding:20px 10px;text-align:center;font-size:18px;font-weight:800;color:#000000;background:${campusBodyBg(campus)};border:1px solid #a8a8a8;">${val > 0 ? val : '-'}</td>`;
       });
     });
     if (showCombined2026Total) {
       const combined2026 = (results[2026]?.GEHU?.[row.type] || 0) + (results[2026]?.GEU?.[row.type] || 0);
-      tds += `<td style="padding:14px 10px;text-align:center;font-size:13px;font-weight:${combined2026 > 0 ? '700' : '400'};color:${combined2026 > 0 ? row.color : '#94a3b8'};background:${rowBg};border:1px solid #e2e8f0;">${combined2026 > 0 ? combined2026 : '-'}</td>`;
+      tds += `<td style="padding:20px 10px;text-align:center;font-size:18px;font-weight:800;color:#000000;background:${total2026Bg};border:1px solid #a8a8a8;">${combined2026 > 0 ? combined2026 : '-'}</td>`;
     }
 
     dataRows += `<tr>${tds}</tr>`;
@@ -1182,24 +1185,20 @@ function buildEmailHTML(years, campuses, results) {
   ];
 
   function buildCampusYoYBlock(campus) {
+    const comparisonYears = years.filter(year => year !== primaryYear);
     return `
     <div style="padding:16px 20px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;width:100%;">
       <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;">${campusLabel(campus)} Comparison</div>
       ${metrics.map(m => {
-        const comparisons = [];
-        for (let i = 0; i < years.length - 1; i += 1) {
-          const currentYear = years[i];
-          const previousYear = years[i + 1];
-          const v1 = results[currentYear]?.[campus]?.[m.type] || 0;
-          const v2 = results[previousYear]?.[campus]?.[m.type] || 0;
-          const diff = v1 - v2;
-          const pct = v2 > 0 ? `${((diff / v2) * 100).toFixed(1)}%` : '—';
+        const comparisons = comparisonYears.map(compareYear => {
+          const primaryValue = results[primaryYear]?.[campus]?.[m.type] || 0;
+          const compareValue = results[compareYear]?.[campus]?.[m.type] || 0;
+          const diff = primaryValue - compareValue;
+          const pct = compareValue > 0 ? `${((diff / compareValue) * 100).toFixed(1)}%` : '—';
           const color = diff > 0 ? '#15803d' : diff < 0 ? '#b91c1c' : '#64748b';
           const sign = diff > 0 ? '+' : '';
-          comparisons.push(
-            `<div style="font-size:12px;font-weight:600;color:#334155;margin-top:4px;">${currentYear} vs ${previousYear}: <span style="color:${color};font-weight:700;">${sign}${diff} (${sign}${pct})</span></div>`
-          );
-        }
+          return `<div style="font-size:12px;font-weight:600;color:#334155;margin-top:4px;">${primaryYear} vs ${compareYear}: <span style="color:${color};font-weight:700;">${sign}${diff} (${sign}${pct})</span></div>`;
+        });
         return `<div style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:10px;">${m.label}${comparisons.join('')}</div>`;
       }).join('')}
     </div>`;
