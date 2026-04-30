@@ -1231,7 +1231,7 @@ function buildEmailHTML(years, campuses, results) {
 
   <div style=";border-radius:12px;padding:20px 24px;margin-bottom:16px;">
     <div style="font-size:20px;font-weight:800;color:black;letter-spacing:-0.5px;">Graphic Era Admissions Report</div>
-    <div style="font-size:12px;color:#94a3b8;margin-top:4px;">Period: 1 Jan → ${dateStr} &nbsp;·&nbsp; Years: ${years.join(' vs ')} &nbsp;·&nbsp; Campus-first comparison</div>
+    <div style="font-size:12px;color:#94a3b8;margin-top:4px;">Period: 1 Jan → ${dateStr} &nbsp;·&nbsp; Years: ${years.join(' vs ')} &nbsp;·&nbsp;</div>
   </div>
 
   <div style="background:white;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
