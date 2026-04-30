@@ -1142,7 +1142,7 @@ function buildEmailHTML(years, campuses, results) {
     headerRow1 += `<th colspan="${years.length}" style="padding:18px 16px;background:${bg};color:#000000;font-size:18px;font-weight:800;text-align:center;border:1px solid #a8a8a8;letter-spacing:0.2px;">${campusLabel(campus)}</th>`;
   });
   if (showCombined2026Total) {
-    headerRow1 += `<th colspan="1" style="padding:18px 16px;background:${topHeaderBg};color:#000000;font-size:18px;font-weight:800;text-align:center;border:1px solid #a8a8a8;letter-spacing:0.2px;">Total 2026</th>`;
+    headerRow1 += `<th colspan="1" style="padding:18px 16px;background:${topHeaderBg};color:#000000;font-size:18px;font-weight:800;text-align:center;border:1px solid #a8a8a8;letter-spacing:0.2px;">Total GEU & GEHU</th>`;
   }
 
   let headerRow2 = `<th style="padding:14px 16px;background:#f7efc9;color:#000000;font-size:14px;font-weight:700;border:1px solid #a8a8a8;"></th>`;
