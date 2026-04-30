@@ -1194,10 +1194,9 @@ function buildEmailHTML(years, campuses, results) {
           const primaryValue = results[primaryYear]?.[campus]?.[m.type] || 0;
           const compareValue = results[compareYear]?.[campus]?.[m.type] || 0;
           const diff = primaryValue - compareValue;
-          const pct = compareValue > 0 ? `${((diff / compareValue) * 100).toFixed(1)}%` : '—';
           const color = diff > 0 ? '#15803d' : diff < 0 ? '#b91c1c' : '#64748b';
           const sign = diff > 0 ? '+' : '';
-          return `<div style="font-size:12px;font-weight:600;color:#334155;margin-top:4px;">${primaryYear} vs ${compareYear}: <span style="color:${color};font-weight:700;">${sign}${diff} (${sign}${pct})</span></div>`;
+          return `<div style="font-size:12px;font-weight:600;color:#334155;margin-top:4px;">${primaryYear} vs ${compareYear}: <span style="color:${color};font-weight:700;">${sign}${diff}</span></div>`;
         });
         return `<div style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:10px;">${m.label}${comparisons.join('')}</div>`;
       }).join('')}
