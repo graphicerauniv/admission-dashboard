@@ -1125,7 +1125,7 @@ function buildEmailHTML(years, campuses, results) {
   }[c] || c);
 
   const showCampuses = campuses;
-  const showCombined2026Total = years.includes(2026) && showCampuses.includes('GEHU') && showCampuses.includes('GEU');
+  const showCombinedTotal = showCampuses.includes('GEHU') && showCampuses.includes('GEU');
 
   function yearTotal(year, type) {
     return showCampuses.reduce((sum, campus) => sum + (results[year]?.[campus]?.[type] || 0), 0);
@@ -1141,8 +1141,8 @@ function buildEmailHTML(years, campuses, results) {
     const bg = topHeaderBg;
     headerRow1 += `<th colspan="${years.length}" style="padding:18px 16px;background:${bg};color:#000000;font-size:18px;font-weight:800;text-align:center;border:1px solid #a8a8a8;letter-spacing:0.2px;">${campusLabel(campus)}</th>`;
   });
-  if (showCombined2026Total) {
-    headerRow1 += `<th colspan="1" style="padding:18px 16px;background:${topHeaderBg};color:#000000;font-size:18px;font-weight:800;text-align:center;border:1px solid #a8a8a8;letter-spacing:0.2px;">Total GEU & GEHU</th>`;
+  if (showCombinedTotal) {
+    headerRow1 += `<th colspan="${years.length}" style="padding:18px 16px;background:${topHeaderBg};color:#000000;font-size:18px;font-weight:800;text-align:center;border:1px solid #a8a8a8;letter-spacing:0.2px;">Total GEU & GEHU</th>`;
   }
 
   let headerRow2 = `<th style="padding:14px 16px;background:#f7efc9;color:#000000;font-size:14px;font-weight:700;border:1px solid #a8a8a8;"></th>`;
@@ -1151,8 +1151,10 @@ function buildEmailHTML(years, campuses, results) {
       headerRow2 += `<th style="padding:14px 10px;background:${yearHeaderBg};color:#000000;font-size:14px;font-weight:800;text-align:center;border:1px solid #a8a8a8;">${y}</th>`;
     });
   });
-  if (showCombined2026Total) {
-    headerRow2 += `<th style="padding:14px 10px;background:${yearHeaderBg};color:#000000;font-size:14px;font-weight:800;text-align:center;border:1px solid #a8a8a8;">2026</th>`;
+  if (showCombinedTotal) {
+    years.forEach(y => {
+      headerRow2 += `<th style="padding:14px 10px;background:${yearHeaderBg};color:#000000;font-size:14px;font-weight:800;text-align:center;border:1px solid #a8a8a8;">${y}</th>`;
+    });
   }
 
   const rows = [
@@ -1170,9 +1172,11 @@ function buildEmailHTML(years, campuses, results) {
         tds += `<td style="padding:20px 10px;text-align:center;font-size:18px;font-weight:800;color:#000000;background:${campusBodyBg(campus)};border:1px solid #a8a8a8;">${val > 0 ? val : '-'}</td>`;
       });
     });
-    if (showCombined2026Total) {
-      const combined2026 = (results[2026]?.GEHU?.[row.type] || 0) + (results[2026]?.GEU?.[row.type] || 0);
-      tds += `<td style="padding:20px 10px;text-align:center;font-size:18px;font-weight:800;color:#000000;background:#d8d6f1;border:1px solid #a8a8a8;">${combined2026 > 0 ? combined2026 : '-'}</td>`;
+    if (showCombinedTotal) {
+      years.forEach(y => {
+        const combinedTotal = (results[y]?.GEHU?.[row.type] || 0) + (results[y]?.GEU?.[row.type] || 0);
+        tds += `<td style="padding:20px 10px;text-align:center;font-size:18px;font-weight:800;color:#000000;background:#d8d6f1;border:1px solid #a8a8a8;">${combinedTotal > 0 ? combinedTotal : '-'}</td>`;
+      });
     }
 
     dataRows += `<tr>${tds}</tr>`;
