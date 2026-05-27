@@ -560,9 +560,13 @@ tbody tr{transition:background .1s;}
         <div class="upload-group">
           <label>Upload Folder ZIP</label>
           <input type="file" id="folderZipUpload" accept=".zip,application/zip,application/x-zip-compressed">
-          <button class="btn-success btn-sm" onclick="convertFolderZip()">⬇ Convert & Download</button>
+          <button class="btn-success btn-sm" id="zipConvertBtn" onclick="convertFolderZip()">▶ Start Conversion</button>
+          <button class="btn-outline btn-sm" id="zipDownloadBtn" onclick="downloadZipJob()" style="display:none;">⬇ Download ZIP</button>
         </div>
         <small style="color:var(--text-muted);display:block;margin-top:8px;">Uploads a ZIP with folders, expands nested ZIPs, converts each image/PDF/previewable file to JPG, and returns one ZIP containing a single folder. Each JPG filename and bottom corner label include its source folder name.</small>
+        <div id="zipProgressWrap" style="display:none;margin-top:12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);height:10px;overflow:hidden;">
+          <div id="zipProgressBar" style="height:100%;width:0%;background:var(--success);transition:width .25s ease;"></div>
+        </div>
         <div id="zipConvertStatus" class="upload-status" style="margin-top:10px;"></div>
       </div>
     </div>
@@ -1510,29 +1514,91 @@ function getDownloadFileName(response, fallback){
   return plainMatch ? plainMatch[1] : fallback;
 }
 
+let activeZipJobId=null;
+let zipJobPollTimer=null;
+
+function setZipProgress(job){
+  const status=document.getElementById('zipConvertStatus');
+  const wrap=document.getElementById('zipProgressWrap');
+  const bar=document.getElementById('zipProgressBar');
+  const downloadBtn=document.getElementById('zipDownloadBtn');
+  const total=Number(job.total)||0;
+  const current=Number(job.current)||0;
+  const pct=job.status==='done' ? 100 : total>0 ? Math.min(99, Math.round((current/total)*100)) : 8;
+  wrap.style.display='';
+  bar.style.width=pct+'%';
+  downloadBtn.style.display=job.status==='done'?'':'none';
+  status.textContent=(job.status==='done'?'✓ ':job.status==='failed'?'✗ ':'')+(job.message||'Processing...');
+  status.style.color=job.status==='done'?'#28a745':job.status==='failed'?'#dc3545':'#ff9800';
+}
+
+async function pollZipJob(jobId){
+  try{
+    const r=await authFetch('/api/admin/zip-jobs/'+encodeURIComponent(jobId));
+    const job=await r.json();
+    if(!r.ok) throw new Error(job.error||'Unable to load conversion status.');
+    setZipProgress(job);
+    if(job.status==='done'||job.status==='failed'){
+      if(zipJobPollTimer){clearInterval(zipJobPollTimer);zipJobPollTimer=null;}
+      document.getElementById('zipConvertBtn').disabled=false;
+      if(job.status==='failed') activeZipJobId=null;
+    }
+  }catch(e){
+    if(zipJobPollTimer){clearInterval(zipJobPollTimer);zipJobPollTimer=null;}
+    document.getElementById('zipConvertStatus').textContent='✗ '+e.message;
+    document.getElementById('zipConvertStatus').style.color='#dc3545';
+    document.getElementById('zipConvertBtn').disabled=false;
+  }
+}
+
 async function convertFolderZip(){
   const input=document.getElementById('folderZipUpload');
   const status=document.getElementById('zipConvertStatus');
+  const btn=document.getElementById('zipConvertBtn');
+  const downloadBtn=document.getElementById('zipDownloadBtn');
+  const progressWrap=document.getElementById('zipProgressWrap');
+  const progressBar=document.getElementById('zipProgressBar');
   const file=input.files[0];
   if(!file){alert('Select a ZIP file first.');return;}
   if(!file.name.toLowerCase().endsWith('.zip')){alert('Please select a .zip file.');return;}
 
-  status.textContent='Converting files to JPG...'; status.style.color='#ff9800';
-  showLoading('Extracting files and converting to JPG...');
+  if(zipJobPollTimer){clearInterval(zipJobPollTimer);zipJobPollTimer=null;}
+  activeZipJobId=null;
+  downloadBtn.style.display='none';
+  progressWrap.style.display='';
+  progressBar.style.width='2%';
+  status.textContent='Uploading ZIP and starting job...'; status.style.color='#ff9800';
+  btn.disabled=true;
 
   const formData=new FormData();
   formData.append('zipFile',file);
 
   try{
     const r=await authFetch('/api/admin/zip-flatten',{method:'POST',body:formData});
+    const job=await r.json();
+    if(!r.ok) throw new Error(job.error||'Zip conversion failed.');
+    activeZipJobId=job.id;
+    setZipProgress(job);
+    zipJobPollTimer=setInterval(()=>pollZipJob(activeZipJobId),2000);
+    pollZipJob(activeZipJobId);
+    input.value='';
+  }catch(e){
+    status.textContent='✗ '+e.message;
+    status.style.color='#dc3545';
+    btn.disabled=false;
+  }
+}
+
+async function downloadZipJob(){
+  if(!activeZipJobId){alert('No completed ZIP conversion is ready.');return;}
+  try{
+    const r=await authFetch('/api/admin/zip-jobs/'+encodeURIComponent(activeZipJobId)+'/download');
     if(!r.ok){
-      let message='Zip conversion failed.';
+      let message='Download failed.';
       try{ const d=await r.json(); message=d.error||message; }catch(_e){}
       throw new Error(message);
     }
-
     const blob=await r.blob();
-    const fileCount=r.headers.get('X-Converted-File-Count')||'';
     const downloadName=getDownloadFileName(r,'converted-jpg.zip');
     const url=URL.createObjectURL(blob);
     const a=document.createElement('a');
@@ -1542,15 +1608,10 @@ async function convertFolderZip(){
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-
-    status.textContent='✓ JPG download ready'+(fileCount?' with '+fileCount+' files':'');
-    status.style.color='#28a745';
-    input.value='';
   }catch(e){
+    const status=document.getElementById('zipConvertStatus');
     status.textContent='✗ '+e.message;
     status.style.color='#dc3545';
-  }finally{
-    hideLoading();
   }
 }
 

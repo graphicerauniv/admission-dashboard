@@ -158,6 +158,8 @@ const zipUpload = multer({
     cb(null, true);
   }
 });
+const zipJobs = new Map();
+const ZIP_JOB_TTL_MS = 2 * 60 * 60 * 1000;
 const photographyMaxFileSizeMb = parseFileSizeLimitMb(
   photographyEnv.PHOTOGRAPHY_MAX_FILE_SIZE_MB || photographyEnv.MAX_FILE_SIZE_MB || process.env.PHOTOGRAPHY_MAX_FILE_SIZE_MB || process.env.MAX_FILE_SIZE_MB,
   102400
@@ -262,6 +264,36 @@ async function listPhotographyObjects() {
 async function removePathQuietly(targetPath) {
   if (!targetPath) return;
   await fs.promises.rm(targetPath, { recursive: true, force: true }).catch(() => {});
+}
+
+function updateZipJob(job, patch) {
+  Object.assign(job, patch, { updatedAt: new Date() });
+}
+
+function serializeZipJob(job) {
+  return {
+    id: job.id,
+    status: job.status,
+    stage: job.stage,
+    message: job.message,
+    current: job.current || 0,
+    total: job.total || 0,
+    fileCount: job.fileCount || 0,
+    downloadUrl: job.status === 'done' ? `/api/admin/zip-jobs/${job.id}/download` : null,
+    error: job.error || null,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt
+  };
+}
+
+function scheduleZipJobCleanup(jobId, delayMs = ZIP_JOB_TTL_MS) {
+  setTimeout(async () => {
+    const job = zipJobs.get(jobId);
+    if (!job) return;
+    await removePathQuietly(job.result?.workDir);
+    await removePathQuietly(job.uploadPath);
+    zipJobs.delete(jobId);
+  }, delayMs).unref?.();
 }
 
 async function findCommand(candidates) {
@@ -524,7 +556,7 @@ function buildJpgOutputName(relativePath, fallbackIndex, usedNames) {
   return `${baseName}${folderSuffix}_${count + 1}.jpg`;
 }
 
-async function convertZipFilesToJpgDownload(zipPath, originalName) {
+async function convertZipFilesToJpgDownload(zipPath, originalName, onProgress = () => {}) {
   const workDir = await fs.promises.mkdtemp(path.join(zipConverterTempDir, 'job-'));
   const extractDir = path.join(workDir, 'extract');
   const inputBaseName = sanitizeFileNamePart(path.basename(originalName, path.extname(originalName)), 'converted');
@@ -536,11 +568,14 @@ async function convertZipFilesToJpgDownload(zipPath, originalName) {
   await fs.promises.mkdir(outputFolder, { recursive: true });
   await fs.promises.mkdir(previewTempDir, { recursive: true });
 
+  onProgress({ stage: 'validating', message: 'Checking uploaded ZIP...', current: 0, total: 0 });
   await validateZipFile(zipPath);
 
+  onProgress({ stage: 'extracting', message: 'Extracting folders and nested ZIPs...', current: 0, total: 0 });
   await execFileAsync('unzip', ['-qq', zipPath, '-d', extractDir], { maxBuffer: 10 * 1024 * 1024 });
   await expandNestedZips(extractDir);
 
+  onProgress({ stage: 'scanning', message: 'Scanning extracted files...', current: 0, total: 0 });
   const extractedFiles = await collectExtractedFiles(extractDir);
   if (!extractedFiles.length) {
     await removePathQuietly(workDir);
@@ -561,6 +596,12 @@ async function convertZipFilesToJpgDownload(zipPath, originalName) {
   const failedFiles = [];
   const convertedRecords = [];
   let convertedCount = 0;
+  onProgress({
+    stage: 'converting',
+    message: `Converting 0/${convertFiles.length} files...`,
+    current: 0,
+    total: convertFiles.length
+  });
 
   for (const [index, filePath] of convertFiles.entries()) {
     try {
@@ -576,8 +617,20 @@ async function convertZipFilesToJpgDownload(zipPath, originalName) {
         sourceType: isConvertibleToJpg(filePath) ? 'Image' : 'Preview'
       });
       convertedCount += 1;
+      onProgress({
+        stage: 'converting',
+        message: `Converting ${index + 1}/${convertFiles.length}: ${path.basename(filePath)}`,
+        current: index + 1,
+        total: convertFiles.length
+      });
     } catch (_err) {
       failedFiles.push(path.relative(extractDir, filePath));
+      onProgress({
+        stage: 'converting',
+        message: `Checked ${index + 1}/${convertFiles.length}; one file failed.`,
+        current: index + 1,
+        total: convertFiles.length
+      });
     }
   }
 
@@ -589,6 +642,7 @@ async function convertZipFilesToJpgDownload(zipPath, originalName) {
     throw err;
   }
 
+  onProgress({ stage: 'record', message: 'Creating Excel conversion record...', current: convertedCount, total: convertFiles.length });
   const folderNames = [...new Set(convertedRecords.map((record) => record.folderName))].sort((a, b) => a.localeCompare(b));
   const workbook = XLSX.utils.book_new();
   const folderSheetRows = [
@@ -618,6 +672,7 @@ async function convertZipFilesToJpgDownload(zipPath, originalName) {
   XLSX.utils.book_append_sheet(workbook, fileSheet, 'Converted Files');
   XLSX.writeFile(workbook, path.join(outputFolder, 'conversion_record.xlsx'));
 
+  onProgress({ stage: 'zipping', message: 'Creating downloadable ZIP...', current: convertedCount, total: convertFiles.length });
   await execFileAsync('zip', ['-qr', outputZip, outputFolderName], { cwd: workDir, maxBuffer: 10 * 1024 * 1024 });
 
   return {
@@ -687,30 +742,93 @@ app.get('/api/users', auth, adminOnly, async (req, res) => {
 });
 
 app.post('/api/admin/zip-flatten', auth, adminOnly, (req, res) => {
-  zipUpload.single('zipFile')(req, res, async (uploadErr) => {
-    let result;
-    try {
-      if (uploadErr) {
-        return res.status(400).json({ error: uploadErr.message || 'Zip upload failed.' });
-      }
-      if (!req.file) {
-        return res.status(400).json({ error: 'No zip file uploaded.' });
-      }
+  zipUpload.single('zipFile')(req, res, (uploadErr) => {
+    if (uploadErr) {
+      return res.status(400).json({ error: uploadErr.message || 'Zip upload failed.' });
+    }
+    if (!req.file) {
+      return res.status(400).json({ error: 'No zip file uploaded.' });
+    }
 
-      result = await convertZipFilesToJpgDownload(req.file.path, req.file.originalname);
-      res.setHeader('X-Converted-File-Count', String(result.fileCount));
-      return res.download(result.outputZip, result.downloadName, async (downloadErr) => {
-        await removePathQuietly(result.workDir);
+    const jobId = crypto.randomUUID();
+    const job = {
+      id: jobId,
+      status: 'queued',
+      stage: 'queued',
+      message: 'ZIP uploaded. Waiting to start conversion...',
+      current: 0,
+      total: 0,
+      fileCount: 0,
+      originalName: req.file.originalname,
+      uploadPath: req.file.path,
+      result: null,
+      error: null,
+      createdBy: req.user.email,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    zipJobs.set(jobId, job);
+
+    setImmediate(async () => {
+      try {
+        updateZipJob(job, {
+          status: 'running',
+          stage: 'starting',
+          message: 'Starting conversion...'
+        });
+        const result = await convertZipFilesToJpgDownload(req.file.path, req.file.originalname, (progress) => {
+          updateZipJob(job, {
+            status: 'running',
+            ...progress
+          });
+        });
+        updateZipJob(job, {
+          status: 'done',
+          stage: 'done',
+          message: `Done. ${result.fileCount} files converted.`,
+          current: result.fileCount,
+          total: result.fileCount,
+          fileCount: result.fileCount,
+          result
+        });
+        scheduleZipJobCleanup(jobId);
+      } catch (err) {
+        await removePathQuietly(job.result?.workDir);
         await removePathQuietly(req.file.path);
-        if (downloadErr && !res.headersSent) {
-          res.status(500).json({ error: 'Download failed: ' + downloadErr.message });
-        }
-      });
-    } catch (err) {
-      await removePathQuietly(result?.workDir);
-      await removePathQuietly(req.file?.path);
-      const status = err.statusCode || 500;
-      return res.status(status).json({ error: err.message || 'Zip conversion failed.' });
+        updateZipJob(job, {
+          status: 'failed',
+          stage: 'failed',
+          message: 'Conversion failed.',
+          error: err.message || 'Zip conversion failed.'
+        });
+        scheduleZipJobCleanup(jobId, 30 * 60 * 1000);
+      }
+    });
+
+    return res.status(202).json(serializeZipJob(job));
+  });
+});
+
+app.get('/api/admin/zip-jobs/:id', auth, adminOnly, (req, res) => {
+  const job = zipJobs.get(req.params.id);
+  if (!job) {
+    return res.status(404).json({ error: 'Zip conversion job not found or expired.' });
+  }
+  return res.json(serializeZipJob(job));
+});
+
+app.get('/api/admin/zip-jobs/:id/download', auth, adminOnly, (req, res) => {
+  const job = zipJobs.get(req.params.id);
+  if (!job) {
+    return res.status(404).json({ error: 'Zip conversion job not found or expired.' });
+  }
+  if (job.status !== 'done' || !job.result?.outputZip) {
+    return res.status(409).json({ error: 'Zip conversion is not ready for download yet.' });
+  }
+
+  return res.download(job.result.outputZip, job.result.downloadName, async (downloadErr) => {
+    if (downloadErr && !res.headersSent) {
+      return res.status(500).json({ error: 'Download failed: ' + downloadErr.message });
     }
   });
 });
