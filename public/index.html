@@ -538,6 +538,14 @@ tbody tr{transition:background .1s;}
         <div class="user-mgmt-header">
           <label>Upload Dashboard Users CSV</label>
           <input type="file" id="userCsvUpload" accept=".csv">
+          <select id="userCampusAccess">
+            <option value="ALL">All Campuses</option>
+            <option value="GEU">GEU</option>
+            <option value="GEHU">GEHU - All Campuses</option>
+            <option value="GEHUDDN">GEHU - Dehradun</option>
+            <option value="GEHUHLD">GEHU - Haldwani</option>
+            <option value="GEHUBTL">GEHU - Bhimtal</option>
+          </select>
           <button class="btn-purple btn-sm" onclick="uploadUsers('user')">⬆ Upload Users</button>
           <span id="userUploadStatus" class="upload-status"></span>
         </div>
@@ -547,7 +555,7 @@ tbody tr{transition:background .1s;}
           <button class="btn-warning btn-sm" onclick="uploadUsers('photography')">⬆ Upload Photography Users</button>
           <span id="photographyUploadStatus" class="upload-status"></span>
         </div>
-        <small style="color:var(--text-muted);display:block;margin:8px 0;">CSV must have Email, Password, Name columns. Optional `Role` column can also be used.</small>
+        <small style="color:var(--text-muted);display:block;margin:8px 0;">CSV must have Email, Password, Name columns. Optional `Role` and `Campus Access` columns can also be used. If no Campus Access column is present, the selected dropdown value is applied to all dashboard users in the CSV.</small>
         <div id="userListWrap" style="max-height:320px;overflow-y:auto;margin-top:8px;"></div>
       </div>
     </div>
@@ -1026,7 +1034,7 @@ let toEmails=[], ccEmails=[];
 
 function getToken(){ return localStorage.getItem('authToken'); }
 function setToken(token){ localStorage.setItem('authToken',token); authToken=token; }
-function clearToken(){ localStorage.removeItem('authToken'); localStorage.removeItem('userRole'); localStorage.removeItem('userName'); authToken=null; userRole=null; }
+function clearToken(){ localStorage.removeItem('authToken'); localStorage.removeItem('userRole'); localStorage.removeItem('userName'); localStorage.removeItem('campusAccess'); authToken=null; userRole=null; }
 
 function authHeaders(){
   const t=getToken();
@@ -1054,6 +1062,7 @@ async function doLogin(){
     setToken(d.token);
     localStorage.setItem('userRole',d.role);
     localStorage.setItem('userName',d.name||d.email);
+    localStorage.setItem('campusAccess',d.campusAccess||'ALL');
     if(d.role==='photography'){
       window.location.href='/photography/';
       return;
@@ -1474,6 +1483,9 @@ async function uploadUsers(role='user'){
   status.textContent='Uploading...'; status.style.color='#ff9800';
   const formData=new FormData(); formData.append('csvFile',file);
   formData.append('role',role);
+  if(!isPhotography){
+    formData.append('campusAccess',document.getElementById('userCampusAccess').value||'ALL');
+  }
   try{
     const r=await authFetch('/api/users/upload',{method:'POST',body:formData});
     const d=await r.json();
@@ -1482,17 +1494,30 @@ async function uploadUsers(role='user'){
   }catch(e){ status.textContent='✗ Upload failed'; status.style.color='#dc3545'; }
 }
 
+function campusAccessLabel(value){
+  const map={
+    ALL:'All Campuses',
+    GEU:'GEU',
+    GEHU:'GEHU - All Campuses',
+    GEHUDDN:'GEHU - Dehradun',
+    GEHUHLD:'GEHU - Haldwani',
+    GEHUBTL:'GEHU - Bhimtal'
+  };
+  return map[value]||value||'All Campuses';
+}
+
 async function loadUserList(){
   try{
     const r=await authFetch('/api/users');
     const users=await r.json();
     const wrap=document.getElementById('userListWrap');
     if(!users.length){wrap.innerHTML='<p style="color:#999;">No users yet.</p>';return;}
-    let html='<table class="user-table"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead><tbody>';
+    let html='<table class="user-table"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Campus Access</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead><tbody>';
     users.forEach(u=>{
       const active=u.active!==false;
       html+='<tr><td>'+(u.name||'-')+'</td><td>'+u.email+'</td>';
       html+='<td>'+((u.role||'user').toUpperCase())+'</td>';
+      html+='<td>'+campusAccessLabel(u.campusAccess||'ALL')+'</td>';
       html+='<td>'+(active?'<span class="status-active">Active</span>':'<span class="status-inactive">Inactive</span>')+'</td>';
       html+='<td>'+(u.createdAt?new Date(u.createdAt).toLocaleDateString():'')+'</td>';
       html+='<td style="display:flex;gap:6px;"><button class="btn-sm '+(active?'btn-success':'btn-ghost')+'" onclick="toggleUser(\''+u._id+'\')">'+(active?'Deactivate':'Activate')+'</button><button class="btn-sm btn-danger" onclick="deleteUser(\''+u._id+'\',\''+u.email+'\')">Delete</button></td></tr>';

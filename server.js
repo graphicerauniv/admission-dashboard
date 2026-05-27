@@ -93,10 +93,26 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
   name: { type: String, default: '' },
   role: { type: String, enum: ['user', 'admin', 'photography'], default: 'user' },
+  campusAccess: { type: String, default: 'ALL' },
   active: { type: Boolean, default: true }
 }, { timestamps: true });
 userSchema.index({ email: 1 });
 const User = mongoose.model('User', userSchema);
+
+function normalizeUserCampusAccess(value) {
+  const raw = String(value || '').trim();
+  if (!raw || /^all$/i.test(raw)) return 'ALL';
+  const normalized = normalizeCampus(raw);
+  if (['GEU', 'GEHU', 'GEHUDDN', 'GEHUHLD', 'GEHUBTL'].includes(normalized)) return normalized;
+  return 'ALL';
+}
+
+function campusAccessLabel(value) {
+  const normalized = normalizeUserCampusAccess(value);
+  if (normalized === 'ALL') return 'All Campuses';
+  if (normalized === 'GEHU') return 'GEHU - All Campuses';
+  return displayCampus(normalized);
+}
 
 function hashPass(pass) {
   return crypto.createHash('sha256').update(pass).digest('hex');
@@ -690,14 +706,15 @@ app.post('/api/login', async (req, res) => {
     if (!email || !password) return res.status(400).json({ error: 'Email and password are required' });
     const emailLower = email.toLowerCase().trim();
     if (emailLower === ADMIN_EMAIL.toLowerCase() && password === ADMIN_PASSWORD) {
-      const token = jwt.sign({ email: emailLower, role: 'admin' }, JWT_SECRET, { expiresIn: '24h' });
-      return res.json({ token, role: 'admin', name: 'Administrator', email: emailLower });
+      const token = jwt.sign({ email: emailLower, role: 'admin', campusAccess: 'ALL' }, JWT_SECRET, { expiresIn: '24h' });
+      return res.json({ token, role: 'admin', name: 'Administrator', email: emailLower, campusAccess: 'ALL' });
     }
     const user = await User.findOne({ email: emailLower, active: true });
     if (!user) return res.status(401).json({ error: 'Invalid email or password' });
     if (user.password !== hashPass(password)) return res.status(401).json({ error: 'Invalid email or password' });
-    const token = jwt.sign({ email: user.email, role: user.role || 'user', userId: user._id }, JWT_SECRET, { expiresIn: '24h' });
-    res.json({ token, role: user.role || 'user', name: user.name || user.email, email: user.email });
+    const campusAccess = normalizeUserCampusAccess(user.campusAccess);
+    const token = jwt.sign({ email: user.email, role: user.role || 'user', userId: user._id, campusAccess }, JWT_SECRET, { expiresIn: '24h' });
+    res.json({ token, role: user.role || 'user', name: user.name || user.email, email: user.email, campusAccess });
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ error: 'Login failed' });
@@ -708,6 +725,7 @@ app.post('/api/users/upload', auth, adminOnly, upload_mem.single('csvFile'), asy
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     const requestedRole = req.body.role === 'photography' ? 'photography' : 'user';
+    const requestedCampusAccess = requestedRole === 'user' ? normalizeUserCampusAccess(req.body.campusAccess) : 'ALL';
     const users = [];
     await new Promise((resolve, reject) => {
       const stream = Readable.from(req.file.buffer.toString('utf-8'));
@@ -718,7 +736,10 @@ app.post('/api/users/upload', auth, adminOnly, upload_mem.single('csvFile'), asy
           const name = (row['Name'] || row['name'] || '').trim();
           const csvRole = (row['Role'] || row['role'] || '').trim().toLowerCase();
           const role = csvRole === 'photography' ? 'photography' : requestedRole;
-          if (email && password) users.push({ email, password: hashPass(password), name, role, active: true });
+          const rowCampusAccess = role === 'user'
+            ? normalizeUserCampusAccess(row['Campus Access'] || row['campusAccess'] || row['Campus'] || row['campus'] || requestedCampusAccess)
+            : 'ALL';
+          if (email && password) users.push({ email, password: hashPass(password), name, role, campusAccess: rowCampusAccess, active: true });
         })
         .on('end', resolve).on('error', reject);
     });
@@ -1931,6 +1952,23 @@ function campusFilterQuery(rawCampus, fields = ['enquiredCenter', 'registeredCen
   return conditions.length ? { $or: conditions } : {};
 }
 
+function userCampusAccess(req) {
+  if (!req.user || req.user.role === 'admin') return 'ALL';
+  return normalizeUserCampusAccess(req.user.campusAccess);
+}
+
+function userCampusAccessFilter(req) {
+  const access = userCampusAccess(req);
+  return access === 'ALL' ? {} : campusFilterQuery(access);
+}
+
+function addAndFilter(query, filter) {
+  if (!filter || Object.keys(filter).length === 0) return query;
+  query.$and = query.$and || [];
+  query.$and.push(filter);
+  return query;
+}
+
 function displayCampus(code) {
   if (!code) return '';
   const normalized = normalizeCampus(code);
@@ -2054,7 +2092,10 @@ function modeCourseQuery(mode) {
 function buildDateFilter(dateField, start, end, extra) {
   const q = { [dateField]: { $gte: start, $lte: end } };
   if (extra.campus) {
-    Object.assign(q, campusFilterQuery(extra.campus));
+    addAndFilter(q, campusFilterQuery(extra.campus));
+  }
+  if (extra.accessCampus && normalizeUserCampusAccess(extra.accessCampus) !== 'ALL') {
+    addAndFilter(q, campusFilterQuery(extra.accessCampus));
   }
   if (extra.course) q.courseName = extra.course;
   if (extra.mode) {
@@ -2089,20 +2130,29 @@ app.get('/api/students', auth, dashboardOnly, async (req, res) => {
     end.setHours(23, 59, 59, 999);
     const dateRange = { $gte: start, $lte: end };
     const modeQ = modeCourseQuery(mode);
+    const accessFilter = userCampusAccessFilter(req);
+    const accessCampus = userCampusAccess(req);
+    const scopedModeQ = { ...modeQ };
+    addAndFilter(scopedModeQ, accessFilter);
 
     const [enqCount, regCount, admCount, campusList, courseList, yearList] = await Promise.all([
-      Student.countDocuments({ enquiryDateParsed: dateRange, ...modeQ }),
-      Student.countDocuments({ registrationDateParsed: dateRange, ...modeQ }),
-      Student.countDocuments({ admissionDateParsed: dateRange, ...modeQ }),
-      Student.distinct('enquiredCenter').then(a => Student.distinct('registeredCenter').then(b => Student.distinct('admittedCenter').then(c => Student.distinct('campus').then(d => {
+      Student.countDocuments({ enquiryDateParsed: dateRange, ...scopedModeQ }),
+      Student.countDocuments({ registrationDateParsed: dateRange, ...scopedModeQ }),
+      Student.countDocuments({ admissionDateParsed: dateRange, ...scopedModeQ }),
+      Promise.all([
+        Student.distinct('enquiredCenter', scopedModeQ),
+        Student.distinct('registeredCenter', scopedModeQ),
+        Student.distinct('admittedCenter', scopedModeQ),
+        Student.distinct('campus', scopedModeQ)
+      ]).then(([a, b, c, d]) => {
         const allRaw = [...a, ...b, ...c, ...d].filter(Boolean);
         const codes = [...new Set(allRaw.map(normalizeCampus))].filter(Boolean);
         return codes.map(displayCampus).sort();
-      })))),
-      Student.distinct('courseName', modeQ).then(arr => arr.filter(Boolean).sort()),
-      Student.aggregate([{ $match: { enquiryDateParsed: dateRange, ...modeQ } }, { $project: { y: { $year: '$enquiryDateParsed' } } }, { $group: { _id: '$y' } }, { $sort: { _id: 1 } }]).then(async enqYears => {
-        const regYears = await Student.aggregate([{ $match: { registrationDateParsed: dateRange, ...modeQ } }, { $project: { y: { $year: '$registrationDateParsed' } } }, { $group: { _id: '$y' } }]);
-        const admYears = await Student.aggregate([{ $match: { admissionDateParsed: dateRange, ...modeQ } }, { $project: { y: { $year: '$admissionDateParsed' } } }, { $group: { _id: '$y' } }]);
+      }),
+      Student.distinct('courseName', scopedModeQ).then(arr => arr.filter(Boolean).sort()),
+      Student.aggregate([{ $match: buildDateFilter('enquiryDateParsed', start, end, { mode, accessCampus }) }, { $project: { y: { $year: '$enquiryDateParsed' } } }, { $group: { _id: '$y' } }, { $sort: { _id: 1 } }]).then(async enqYears => {
+        const regYears = await Student.aggregate([{ $match: buildDateFilter('registrationDateParsed', start, end, { mode, accessCampus }) }, { $project: { y: { $year: '$registrationDateParsed' } } }, { $group: { _id: '$y' } }]);
+        const admYears = await Student.aggregate([{ $match: buildDateFilter('admissionDateParsed', start, end, { mode, accessCampus }) }, { $project: { y: { $year: '$admissionDateParsed' } } }, { $group: { _id: '$y' } }]);
         return [...new Set([...enqYears, ...regYears, ...admYears].map(r => r._id))].filter(Boolean).sort().map(String);
       })
     ]);
@@ -2119,7 +2169,7 @@ app.get('/api/students/page', auth, dashboardOnly, async (req, res) => {
     const start = toLocalDate(startDate), end = toLocalDate(endDate);
     end.setHours(23, 59, 59, 999);
     const pg = Math.max(1, parseInt(page)), lim = Math.min(100, Math.max(1, parseInt(limit) || 30)), skip = (pg - 1) * lim;
-    const extra = { campus, course, year, search, mode };
+    const extra = { campus, course, year, search, mode, accessCampus: userCampusAccess(req) };
 
     if (tab === 'all') {
       const [enqDocs, regDocs, admDocs] = await Promise.all([
@@ -2153,7 +2203,7 @@ app.get('/api/students/export', auth, dashboardOnly, async (req, res) => {
 
     const start = toLocalDate(startDate), end = toLocalDate(endDate);
     end.setHours(23, 59, 59, 999);
-    const extra = { campus, course, year, search, mode };
+    const extra = { campus, course, year, search, mode, accessCampus: userCampusAccess(req) };
 
     if (tab === 'all' || tab === 'allSheets') {
       const [enqDocs, regDocs, admDocs] = await Promise.all([
@@ -2182,6 +2232,12 @@ app.get('/api/student/:id', auth, dashboardOnly, async (req, res) => {
   try {
     const s = await Student.findById(req.params.id).lean();
     if (!s) return res.status(404).json({ error: 'Student not found' });
+    const access = userCampusAccess(req);
+    if (access !== 'ALL') {
+      const allowed = ['campus', 'enquiredCenter', 'registeredCenter', 'admittedCenter']
+        .some(field => normalizeCampus(s[field]) === access || (access === 'GEHU' && /^GEHU/.test(normalizeCampus(s[field]))));
+      if (!allowed) return res.status(403).json({ error: 'You do not have access to this campus record' });
+    }
     s.campus = displayCampus(s.campus); s.enquiredCenter = displayCampus(s.enquiredCenter);
     s.registeredCenter = displayCampus(s.registeredCenter); s.admittedCenter = displayCampus(s.admittedCenter);
     res.json(s);
@@ -2205,7 +2261,9 @@ app.delete('/api/batch/:batchId', auth, adminOnly, async (req, res) => {
 app.get('/api/count', auth, dashboardOnly, async (req, res) => {
   try {
     const { mode } = req.query;
-    const count = await Student.countDocuments(mode ? modeCourseQuery(mode) : {});
+    const query = mode ? modeCourseQuery(mode) : {};
+    addAndFilter(query, userCampusAccessFilter(req));
+    const count = await Student.countDocuments(query);
     res.json({ count });
   }
   catch (err) { res.status(500).json({ error: err.message }); }
@@ -2222,7 +2280,7 @@ app.get('/api/compare', auth, dashboardOnly, async (req, res) => {
     const start1 = new Date(Date.UTC(y1, sm, sd)), end1 = new Date(Date.UTC(y1, em, ed, 23, 59, 59, 999));
     const start2 = new Date(Date.UTC(y2, sm, sd)), end2 = new Date(Date.UTC(y2, em, ed, 23, 59, 59, 999));
     const start3 = new Date(Date.UTC(y3, sm, sd)), end3 = new Date(Date.UTC(y3, em, ed, 23, 59, 59, 999));
-    const extra = { campus: campus || '', course: course || '', mode };
+    const extra = { campus: campus || '', course: course || '', mode, accessCampus: userCampusAccess(req) };
 
     const [enq1, reg1, adm1, enq2, reg2, adm2, enq3, reg3, adm3] = await Promise.all([
       Student.countDocuments(buildDateFilter('enquiryDateParsed', start1, end1, extra)),
@@ -2255,7 +2313,7 @@ app.get('/api/compare/export', auth, dashboardOnly, async (req, res) => {
     const start1 = new Date(Date.UTC(y1, sm, sd)), end1 = new Date(Date.UTC(y1, em, ed, 23, 59, 59, 999));
     const start2 = new Date(Date.UTC(y2, sm, sd)), end2 = new Date(Date.UTC(y2, em, ed, 23, 59, 59, 999));
     const start3 = new Date(Date.UTC(y3, sm, sd)), end3 = new Date(Date.UTC(y3, em, ed, 23, 59, 59, 999));
-    const extra = { campus: campus || '', course: course || '', mode };
+    const extra = { campus: campus || '', course: course || '', mode, accessCampus: userCampusAccess(req) };
 
     const [enq1, reg1, adm1, enq2, reg2, adm2, enq3, reg3, adm3] = await Promise.all([
       Student.find(buildDateFilter('enquiryDateParsed', start1, end1, extra), listProjection).lean(),
