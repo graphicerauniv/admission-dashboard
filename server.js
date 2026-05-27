@@ -88,16 +88,35 @@ const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/admission_
 mongoose.connect(MONGO_URI).then(() => console.log('MongoDB connected')).catch(e => { console.error('MongoDB error:', e); process.exit(1); });
 
 // ─── User Schema ───
+const DASHBOARD_FEATURES = ['dashboard', 'compare', 'offerletter'];
 const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
   password: { type: String, required: true },
   name: { type: String, default: '' },
   role: { type: String, enum: ['user', 'admin', 'photography'], default: 'user' },
   campusAccess: { type: String, default: 'ALL' },
+  featureAccess: { type: [String], default: () => DASHBOARD_FEATURES.slice() },
   active: { type: Boolean, default: true }
 }, { timestamps: true });
 userSchema.index({ email: 1 });
 const User = mongoose.model('User', userSchema);
+
+function normalizeFeatureAccess(value) {
+  if (Array.isArray(value) && value.length === 0) return [];
+  if (value === undefined || value === null) return DASHBOARD_FEATURES.slice();
+  const raw = Array.isArray(value)
+    ? value
+    : String(value || '').split(',');
+  const selected = raw.map(v => String(v || '').trim().toLowerCase()).filter(Boolean);
+  const allowed = selected.filter(v => DASHBOARD_FEATURES.includes(v));
+  return allowed.length ? [...new Set(allowed)] : DASHBOARD_FEATURES.slice();
+}
+
+function hasFeatureAccess(user, feature) {
+  if (!feature || user?.role === 'admin') return true;
+  const features = normalizeFeatureAccess(user?.featureAccess);
+  return features.includes(feature);
+}
 
 function normalizeUserCampusAccess(value) {
   const raw = String(value || '').trim();
@@ -118,12 +137,24 @@ function hashPass(pass) {
   return crypto.createHash('sha256').update(pass).digest('hex');
 }
 
-function auth(req, res, next) {
+async function auth(req, res, next) {
   const header = req.headers.authorization;
   if (!header || !header.startsWith('Bearer ')) return res.status(401).json({ error: 'Login required' });
   try {
     const decoded = jwt.verify(header.split(' ')[1], JWT_SECRET);
-    req.user = decoded;
+    if (decoded.userId) {
+      const user = await User.findById(decoded.userId, { password: 0 }).lean();
+      if (!user || user.active === false) return res.status(401).json({ error: 'Invalid or inactive user. Please login again.' });
+      req.user = {
+        ...decoded,
+        role: user.role || decoded.role || 'user',
+        email: user.email || decoded.email,
+        campusAccess: normalizeUserCampusAccess(user.campusAccess),
+        featureAccess: normalizeFeatureAccess(user.featureAccess)
+      };
+    } else {
+      req.user = { ...decoded, campusAccess: decoded.campusAccess || 'ALL', featureAccess: normalizeFeatureAccess(decoded.featureAccess) };
+    }
     next();
   } catch (e) {
     return res.status(401).json({ error: 'Invalid or expired token. Please login again.' });
@@ -140,6 +171,15 @@ function dashboardOnly(req, res, next) {
     return res.status(403).json({ error: 'Photography users can only access the photography folder.' });
   }
   next();
+}
+
+function featureOnly(feature) {
+  return (req, res, next) => {
+    if (!hasFeatureAccess(req.user, feature)) {
+      return res.status(403).json({ error: 'You do not have access to this feature.' });
+    }
+    next();
+  };
 }
 
 function photographyAccessOnly(req, res, next) {
@@ -706,15 +746,16 @@ app.post('/api/login', async (req, res) => {
     if (!email || !password) return res.status(400).json({ error: 'Email and password are required' });
     const emailLower = email.toLowerCase().trim();
     if (emailLower === ADMIN_EMAIL.toLowerCase() && password === ADMIN_PASSWORD) {
-      const token = jwt.sign({ email: emailLower, role: 'admin', campusAccess: 'ALL' }, JWT_SECRET, { expiresIn: '24h' });
-      return res.json({ token, role: 'admin', name: 'Administrator', email: emailLower, campusAccess: 'ALL' });
+      const token = jwt.sign({ email: emailLower, role: 'admin', campusAccess: 'ALL', featureAccess: DASHBOARD_FEATURES }, JWT_SECRET, { expiresIn: '24h' });
+      return res.json({ token, role: 'admin', name: 'Administrator', email: emailLower, campusAccess: 'ALL', featureAccess: DASHBOARD_FEATURES });
     }
     const user = await User.findOne({ email: emailLower, active: true });
     if (!user) return res.status(401).json({ error: 'Invalid email or password' });
     if (user.password !== hashPass(password)) return res.status(401).json({ error: 'Invalid email or password' });
     const campusAccess = normalizeUserCampusAccess(user.campusAccess);
-    const token = jwt.sign({ email: user.email, role: user.role || 'user', userId: user._id, campusAccess }, JWT_SECRET, { expiresIn: '24h' });
-    res.json({ token, role: user.role || 'user', name: user.name || user.email, email: user.email, campusAccess });
+    const featureAccess = normalizeFeatureAccess(user.featureAccess);
+    const token = jwt.sign({ email: user.email, role: user.role || 'user', userId: user._id, campusAccess, featureAccess }, JWT_SECRET, { expiresIn: '24h' });
+    res.json({ token, role: user.role || 'user', name: user.name || user.email, email: user.email, campusAccess, featureAccess });
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ error: 'Login failed' });
@@ -739,7 +780,10 @@ app.post('/api/users/upload', auth, adminOnly, upload_mem.single('csvFile'), asy
           const rowCampusAccess = role === 'user'
             ? normalizeUserCampusAccess(row['Campus Access'] || row['campusAccess'] || row['Campus'] || row['campus'] || requestedCampusAccess)
             : 'ALL';
-          if (email && password) users.push({ email, password: hashPass(password), name, role, campusAccess: rowCampusAccess, active: true });
+          const featureAccess = role === 'user'
+            ? normalizeFeatureAccess(row['Feature Access'] || row['featureAccess'] || DASHBOARD_FEATURES)
+            : DASHBOARD_FEATURES.slice();
+          if (email && password) users.push({ email, password: hashPass(password), name, role, campusAccess: rowCampusAccess, featureAccess, active: true });
         })
         .on('end', resolve).on('error', reject);
     });
@@ -1219,6 +1263,21 @@ app.patch('/api/users/:id/toggle', auth, adminOnly, async (req, res) => {
     user.active = !user.active;
     await user.save();
     res.json({ success: true, active: user.active });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.patch('/api/users/:id/access', auth, adminOnly, async (req, res) => {
+  try {
+    const updates = {};
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'campusAccess')) {
+      updates.campusAccess = normalizeUserCampusAccess(req.body.campusAccess);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'featureAccess')) {
+      updates.featureAccess = normalizeFeatureAccess(req.body.featureAccess);
+    }
+    const user = await User.findByIdAndUpdate(req.params.id, { $set: updates }, { new: true, projection: { password: 0 } }).lean();
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json({ success: true, user });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -2121,7 +2180,7 @@ const mapDoc = (s, campusField, dateStrField) => ({
   dateStr: s[dateStrField] || ''
 });
 
-app.get('/api/students', auth, dashboardOnly, async (req, res) => {
+app.get('/api/students', auth, dashboardOnly, featureOnly('dashboard'), async (req, res) => {
   try {
     const { startDate, endDate, mode } = req.query;
     if (!startDate || !endDate) return res.status(400).json({ error: 'startDate and endDate required' });
@@ -2161,7 +2220,7 @@ app.get('/api/students', auth, dashboardOnly, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.get('/api/students/page', auth, dashboardOnly, async (req, res) => {
+app.get('/api/students/page', auth, dashboardOnly, featureOnly('dashboard'), async (req, res) => {
   try {
     const { startDate, endDate, tab, page = 1, limit = 30, campus, course, year, search, mode } = req.query;
     if (!startDate || !endDate || !tab) return res.status(400).json({ error: 'startDate, endDate, tab required' });
@@ -2196,7 +2255,7 @@ app.get('/api/students/page', auth, dashboardOnly, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.get('/api/students/export', auth, dashboardOnly, async (req, res) => {
+app.get('/api/students/export', auth, dashboardOnly, featureOnly('dashboard'), async (req, res) => {
   try {
     const { startDate, endDate, tab, campus, course, year, search, mode } = req.query;
     if (!startDate || !endDate || !tab) return res.status(400).json({ error: 'startDate, endDate, tab required' });
@@ -2228,7 +2287,7 @@ app.get('/api/students/export', auth, dashboardOnly, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.get('/api/student/:id', auth, dashboardOnly, async (req, res) => {
+app.get('/api/student/:id', auth, dashboardOnly, featureOnly('dashboard'), async (req, res) => {
   try {
     const s = await Student.findById(req.params.id).lean();
     if (!s) return res.status(404).json({ error: 'Student not found' });
@@ -2258,7 +2317,7 @@ app.delete('/api/batch/:batchId', auth, adminOnly, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.get('/api/count', auth, dashboardOnly, async (req, res) => {
+app.get('/api/count', auth, dashboardOnly, featureOnly('dashboard'), async (req, res) => {
   try {
     const { mode } = req.query;
     const query = mode ? modeCourseQuery(mode) : {};
@@ -2269,7 +2328,7 @@ app.get('/api/count', auth, dashboardOnly, async (req, res) => {
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.get('/api/compare', auth, dashboardOnly, async (req, res) => {
+app.get('/api/compare', auth, dashboardOnly, featureOnly('compare'), async (req, res) => {
   try {
     const { startMonth, startDay, endMonth, endDay, year1, year2, year3, campus, course, mode } = req.query;
     if (!startMonth || !startDay || !endMonth || !endDay || !year1 || !year2 || !year3) return res.status(400).json({ error: 'All params required' });
@@ -2302,7 +2361,7 @@ app.get('/api/compare', auth, dashboardOnly, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.get('/api/compare/export', auth, dashboardOnly, async (req, res) => {
+app.get('/api/compare/export', auth, dashboardOnly, featureOnly('compare'), async (req, res) => {
   try {
     const { startMonth, startDay, endMonth, endDay, year1, year2, year3, campus, course, mode } = req.query;
     if (!startMonth || !startDay || !endMonth || !endDay || !year1 || !year2 || !year3) return res.status(400).json({ error: 'All params required' });

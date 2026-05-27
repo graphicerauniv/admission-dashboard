@@ -1028,13 +1028,14 @@ let currentPage=1, totalPages=1, totalRecords=0;
 let searchTimer=null;
 let authToken=null;
 let userRole=null;
+let userFeatureAccess=[];
 
 // ── Email report state ──
 let toEmails=[], ccEmails=[];
 
 function getToken(){ return localStorage.getItem('authToken'); }
 function setToken(token){ localStorage.setItem('authToken',token); authToken=token; }
-function clearToken(){ localStorage.removeItem('authToken'); localStorage.removeItem('userRole'); localStorage.removeItem('userName'); localStorage.removeItem('campusAccess'); authToken=null; userRole=null; }
+function clearToken(){ localStorage.removeItem('authToken'); localStorage.removeItem('userRole'); localStorage.removeItem('userName'); localStorage.removeItem('campusAccess'); localStorage.removeItem('featureAccess'); authToken=null; userRole=null; userFeatureAccess=[]; }
 
 function authHeaders(){
   const t=getToken();
@@ -1063,6 +1064,7 @@ async function doLogin(){
     localStorage.setItem('userRole',d.role);
     localStorage.setItem('userName',d.name||d.email);
     localStorage.setItem('campusAccess',d.campusAccess||'ALL');
+    localStorage.setItem('featureAccess',JSON.stringify(d.featureAccess||['dashboard','compare','offerletter']));
     if(d.role==='photography'){
       window.location.href='/photography/';
       return;
@@ -1083,6 +1085,8 @@ function showLoginPage(){
 
 function showDashboard(role, name){
   userRole=role;
+  const storedFeatures=localStorage.getItem('featureAccess');
+  try{ userFeatureAccess=storedFeatures===null?['dashboard','compare','offerletter']:JSON.parse(storedFeatures||'[]'); }catch(_e){ userFeatureAccess=[]; }
   document.getElementById('loginPage').style.display='none';
   document.getElementById('dashboardPage').style.display='block';
   document.getElementById('userName').textContent=name;
@@ -1092,12 +1096,36 @@ function showDashboard(role, name){
   const initials=name.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
   document.getElementById('navAvatar').textContent=initials||'U';
   document.querySelectorAll('.admin-only').forEach(el=>{ el.style.display=role==='admin'?'':'none'; });
-  switchView('dashboard');
-  loadDBCount();
+  applyFeatureAccess(role);
+  const firstView=hasFeature('dashboard')?'dashboard':hasFeature('compare')?'compare':hasFeature('offerletter')?'offerletter':'dashboard';
+  switchView(firstView);
+  if(hasFeature('dashboard')) loadDBCount();
   if(role==='admin'){ loadUserList(); loadMerittoInfo(); loadBatches(); }
 }
 
+function hasFeature(feature){
+  return userRole==='admin'||userFeatureAccess.includes(feature);
+}
+
+function applyFeatureAccess(role){
+  const map=[
+    ['navDashboard','dashboard'],
+    ['navCompare','compare'],
+    ['navOfferletter','offerletter']
+  ];
+  map.forEach(([id,feature])=>{
+    const el=document.getElementById(id);
+    if(el) el.style.display=(role==='admin'||hasFeature(feature))?'':'none';
+  });
+}
+
 function switchView(view){
+  const featureMap={dashboard:'dashboard',compare:'compare',offerletter:'offerletter'};
+  if(featureMap[view]&&!hasFeature(featureMap[view])){
+    alert('You do not have access to this feature.');
+    view='dashboard';
+    if(!hasFeature('dashboard')) return;
+  }
   document.getElementById('viewDashboard').classList.add('hidden');
   document.getElementById('viewAdmin').classList.add('hidden');
   document.getElementById('viewCompare').classList.add('hidden');
@@ -1145,11 +1173,15 @@ function switchView(view){
     showLoading('Verifying session...');
     const role=localStorage.getItem('userRole')||'user';
     const name=localStorage.getItem('userName')||'User';
+    const storedFeatures=localStorage.getItem('featureAccess');
+    try{ userFeatureAccess=storedFeatures===null?['dashboard','compare','offerletter']:JSON.parse(storedFeatures||'[]'); }catch(_e){ userFeatureAccess=[]; }
     if(role==='photography'){
       hideLoading();
       window.location.href='/photography/';
       return;
     }
+    const canCheckDashboard=role==='admin'||userFeatureAccess.includes('dashboard');
+    if(!canCheckDashboard){ hideLoading(); showDashboard(role,name); return; }
     fetch('/api/count',{headers:{'Authorization':'Bearer '+token}}).then(r=>{
       hideLoading();
       if(r.ok){ showDashboard(role,name); } else { clearToken(); showLoginPage(); }
@@ -1506,16 +1538,28 @@ function campusAccessLabel(value){
   return map[value]||value||'All Campuses';
 }
 
+const featureOptions=[
+  {key:'dashboard',label:'Dashboard'},
+  {key:'compare',label:'Compare'},
+  {key:'offerletter',label:'Offer Letter'}
+];
+let adminUserCache=[];
+
+function escapeHtml(value){
+  return String(value||'').replace(/[&<>"']/g,ch=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[ch]));
+}
+
 async function loadUserList(){
   try{
     const r=await authFetch('/api/users');
     const users=await r.json();
+    adminUserCache=users;
     const wrap=document.getElementById('userListWrap');
     if(!users.length){wrap.innerHTML='<p style="color:#999;">No users yet.</p>';return;}
     let html='<table class="user-table"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Campus Access</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead><tbody>';
     users.forEach(u=>{
       const active=u.active!==false;
-      html+='<tr><td>'+(u.name||'-')+'</td><td>'+u.email+'</td>';
+      html+='<tr><td><span class="name-link" onclick="openUserAccessModal(\''+u._id+'\')">'+escapeHtml(u.name||'-')+'</span></td><td>'+escapeHtml(u.email)+'</td>';
       html+='<td>'+((u.role||'user').toUpperCase())+'</td>';
       html+='<td>'+campusAccessLabel(u.campusAccess||'ALL')+'</td>';
       html+='<td>'+(active?'<span class="status-active">Active</span>':'<span class="status-inactive">Inactive</span>')+'</td>';
@@ -1529,6 +1573,45 @@ async function loadUserList(){
 
 async function toggleUser(id){ try{ await authFetch('/api/users/'+id+'/toggle',{method:'PATCH'}); loadUserList(); }catch(e){alert('Failed');} }
 async function deleteUser(id,email){ if(!confirm('Delete user '+email+'?')) return; try{ await authFetch('/api/users/'+id,{method:'DELETE'}); loadUserList(); }catch(e){alert('Failed');} }
+
+function openUserAccessModal(id){
+  const user=adminUserCache.find(u=>u._id===id);
+  if(!user) return;
+  const features=Array.isArray(user.featureAccess)?user.featureAccess:['dashboard','compare','offerletter'];
+  document.getElementById('modalTitle').textContent='User Access';
+  const campusOptions=[
+    ['ALL','All Campuses'],
+    ['GEU','GEU'],
+    ['GEHU','GEHU - All Campuses'],
+    ['GEHUDDN','GEHU - Dehradun'],
+    ['GEHUHLD','GEHU - Haldwani'],
+    ['GEHUBTL','GEHU - Bhimtal']
+  ];
+  let html='<div class="modal-section"><h4>👤 '+escapeHtml(user.name||user.email)+'</h4><div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">'+escapeHtml(user.email)+'</div>';
+  html+='<div class="field-row"><label>Campus Access</label><select id="accessCampusSelect">'+campusOptions.map(([v,l])=>'<option value="'+v+'" '+((user.campusAccess||'ALL')===v?'selected':'')+'>'+l+'</option>').join('')+'</select></div>';
+  html+='<div class="section-label">Features</div><div style="display:grid;gap:10px;">';
+  featureOptions.forEach(f=>{
+    const checked=features.includes(f.key)?'checked':'';
+    html+='<label style="display:flex;align-items:center;gap:10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;cursor:pointer;"><input type="checkbox" class="feature-access-check" value="'+f.key+'" '+checked+'> <span>'+f.label+'</span></label>';
+  });
+  html+='</div><div style="display:flex;gap:8px;margin-top:18px;"><button class="btn-success" onclick="saveUserAccess(\''+user._id+'\')">Save Access</button><button class="btn-ghost" onclick="closeAccessModal()">Cancel</button></div></div>';
+  document.getElementById('modalBody').innerHTML=html;
+  document.getElementById('modalOverlay').classList.add('show');
+}
+
+function closeAccessModal(){ document.getElementById('modalOverlay').classList.remove('show'); }
+
+async function saveUserAccess(id){
+  const featureAccess=[...document.querySelectorAll('.feature-access-check:checked')].map(el=>el.value);
+  const campusAccess=document.getElementById('accessCampusSelect').value||'ALL';
+  try{
+    const r=await authFetch('/api/users/'+id+'/access',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({campusAccess,featureAccess})});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Failed to update access');
+    document.getElementById('modalOverlay').classList.remove('show');
+    loadUserList();
+  }catch(e){ alert(e.message); }
+}
 
 // ─── Zip File Converter ───
 function getDownloadFileName(response, fallback){
