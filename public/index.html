@@ -551,6 +551,21 @@ tbody tr{transition:background .1s;}
         <div id="userListWrap" style="max-height:320px;overflow-y:auto;margin-top:8px;"></div>
       </div>
     </div>
+
+    <div class="section-card admin-only" id="zipConverter" style="display:none;">
+      <div class="section-header">
+        <div class="section-title"><span class="icon" style="background:var(--info-light);color:#0e7490;">🗜</span>Zip File Converter</div>
+      </div>
+      <div class="section-body">
+        <div class="upload-group">
+          <label>Upload Folder ZIP</label>
+          <input type="file" id="folderZipUpload" accept=".zip,application/zip,application/x-zip-compressed">
+          <button class="btn-success btn-sm" onclick="convertFolderZip()">⬇ Convert & Download</button>
+        </div>
+        <small style="color:var(--text-muted);display:block;margin-top:8px;">Uploads a ZIP with folders, expands nested ZIPs, converts each image/PDF/previewable file to JPG, and returns one ZIP containing a single folder. Each JPG filename and bottom corner label include its source folder name.</small>
+        <div id="zipConvertStatus" class="upload-status" style="margin-top:10px;"></div>
+      </div>
+    </div>
   </div>
 
   <div class="section-card admin-only" id="daywiseCompareSection" style="display:none;">
@@ -1485,6 +1500,59 @@ async function loadUserList(){
 
 async function toggleUser(id){ try{ await authFetch('/api/users/'+id+'/toggle',{method:'PATCH'}); loadUserList(); }catch(e){alert('Failed');} }
 async function deleteUser(id,email){ if(!confirm('Delete user '+email+'?')) return; try{ await authFetch('/api/users/'+id,{method:'DELETE'}); loadUserList(); }catch(e){alert('Failed');} }
+
+// ─── Zip File Converter ───
+function getDownloadFileName(response, fallback){
+  const disposition=response.headers.get('Content-Disposition')||'';
+  const utfMatch=disposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if(utfMatch) return decodeURIComponent(utfMatch[1].replace(/"/g,''));
+  const plainMatch=disposition.match(/filename="?([^"]+)"?/i);
+  return plainMatch ? plainMatch[1] : fallback;
+}
+
+async function convertFolderZip(){
+  const input=document.getElementById('folderZipUpload');
+  const status=document.getElementById('zipConvertStatus');
+  const file=input.files[0];
+  if(!file){alert('Select a ZIP file first.');return;}
+  if(!file.name.toLowerCase().endsWith('.zip')){alert('Please select a .zip file.');return;}
+
+  status.textContent='Converting files to JPG...'; status.style.color='#ff9800';
+  showLoading('Extracting files and converting to JPG...');
+
+  const formData=new FormData();
+  formData.append('zipFile',file);
+
+  try{
+    const r=await authFetch('/api/admin/zip-flatten',{method:'POST',body:formData});
+    if(!r.ok){
+      let message='Zip conversion failed.';
+      try{ const d=await r.json(); message=d.error||message; }catch(_e){}
+      throw new Error(message);
+    }
+
+    const blob=await r.blob();
+    const fileCount=r.headers.get('X-Converted-File-Count')||'';
+    const downloadName=getDownloadFileName(r,'converted-jpg.zip');
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;
+    a.download=downloadName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+
+    status.textContent='✓ JPG download ready'+(fileCount?' with '+fileCount+' files':'');
+    status.style.color='#28a745';
+    input.value='';
+  }catch(e){
+    status.textContent='✗ '+e.message;
+    status.style.color='#dc3545';
+  }finally{
+    hideLoading();
+  }
+}
 
 // ════════════════════════════════════════════════════
 // ─── SEND REPORT MODAL ──────────────────────────────

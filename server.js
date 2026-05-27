@@ -11,6 +11,9 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer'); // npm install nodemailer
 const XLSX = require('xlsx'); // npm install xlsx
+const { execFile } = require('child_process');
+const { promisify } = require('util');
+const sharp = require('sharp');
 
 dotenv.config();
 dotenv.config({ path: path.join(__dirname, 'photography', '.env'), override: false });
@@ -19,6 +22,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+
+const execFileAsync = promisify(execFile);
+const commandCache = new Map();
 
 const photographyPublicDir = path.join(__dirname, 'photography', 'public');
 const photographyUploadsDir = path.join(__dirname, 'photography', 'uploads');
@@ -133,6 +139,25 @@ function parseFileSizeLimitMb(value, fallbackMb) {
 }
 
 const upload_mem = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+const zipConverterTempDir = path.join(__dirname, 'tmp', 'zip-converter');
+fs.mkdirSync(zipConverterTempDir, { recursive: true });
+const zipUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, zipConverterTempDir),
+    filename: (_req, file, cb) => {
+      const extension = path.extname(file.originalname).toLowerCase() || '.zip';
+      cb(null, `${Date.now()}-${crypto.randomUUID()}${extension}`);
+    }
+  }),
+  limits: { fileSize: parseFileSizeLimitMb(process.env.ZIP_CONVERTER_MAX_FILE_SIZE_MB, 1024) * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ext !== '.zip') {
+      return cb(new Error('Please upload a .zip file.'));
+    }
+    cb(null, true);
+  }
+});
 const photographyMaxFileSizeMb = parseFileSizeLimitMb(
   photographyEnv.PHOTOGRAPHY_MAX_FILE_SIZE_MB || photographyEnv.MAX_FILE_SIZE_MB || process.env.PHOTOGRAPHY_MAX_FILE_SIZE_MB || process.env.MAX_FILE_SIZE_MB,
   102400
@@ -234,6 +259,375 @@ async function listPhotographyObjects() {
   return objects;
 }
 
+async function removePathQuietly(targetPath) {
+  if (!targetPath) return;
+  await fs.promises.rm(targetPath, { recursive: true, force: true }).catch(() => {});
+}
+
+async function findCommand(candidates) {
+  const cacheKey = candidates.join('|');
+  if (commandCache.has(cacheKey)) return commandCache.get(cacheKey);
+
+  for (const candidate of candidates) {
+    try {
+      await execFileAsync('which', [candidate], { maxBuffer: 1024 * 1024 });
+      commandCache.set(cacheKey, candidate);
+      return candidate;
+    } catch (_err) {
+      // Try next candidate.
+    }
+  }
+
+  commandCache.set(cacheKey, null);
+  return null;
+}
+
+function isUnsafeZipEntry(entryName) {
+  const normalized = String(entryName || '').replace(/\\/g, '/');
+  if (!normalized || normalized.startsWith('/') || /^[a-zA-Z]:/.test(normalized)) return true;
+  return normalized.split('/').some((part) => part === '..');
+}
+
+function sanitizeFileNamePart(value, fallback) {
+  const cleaned = String(value || '')
+    .trim()
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
+    .replace(/\s+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return cleaned || fallback;
+}
+
+function escapeXml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+async function collectExtractedFiles(rootDir) {
+  const files = [];
+  const pending = [rootDir];
+
+  while (pending.length) {
+    const current = pending.pop();
+    const entries = await fs.promises.readdir(current, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(current, entry.name);
+      if (entry.isSymbolicLink()) continue;
+      if (entry.isDirectory()) {
+        if (entry.name !== '__MACOSX') pending.push(fullPath);
+        continue;
+      }
+      if (!entry.isFile() || entry.name === '.DS_Store') continue;
+      files.push(fullPath);
+    }
+  }
+
+  return files;
+}
+
+function isConvertibleToJpg(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  return ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tif', '.tiff', '.heic', '.heif'].includes(ext);
+}
+
+function isZipFile(filePath) {
+  return path.extname(filePath).toLowerCase() === '.zip';
+}
+
+function isPdfFile(filePath) {
+  return path.extname(filePath).toLowerCase() === '.pdf';
+}
+
+async function validateZipFile(zipPath) {
+  const listing = await execFileAsync('unzip', ['-Z1', zipPath], { maxBuffer: 10 * 1024 * 1024 });
+  const entries = listing.stdout.split(/\r?\n/).filter(Boolean);
+  const unsafeEntry = entries.find(isUnsafeZipEntry);
+  if (unsafeEntry) {
+    const err = new Error(`Unsafe zip path found: ${unsafeEntry}`);
+    err.statusCode = 400;
+    throw err;
+  }
+}
+
+async function expandNestedZips(rootDir) {
+  let expandedCount = 0;
+  const maxNestedZips = 200;
+
+  while (true) {
+    const files = await collectExtractedFiles(rootDir);
+    const zipFiles = files.filter((filePath) => isZipFile(filePath));
+    if (!zipFiles.length) return expandedCount;
+
+    for (const zipFile of zipFiles) {
+      if (expandedCount >= maxNestedZips) {
+        const err = new Error('Too many nested zip files were found.');
+        err.statusCode = 400;
+        throw err;
+      }
+
+      await validateZipFile(zipFile);
+      const parentDir = path.dirname(zipFile);
+      const zipFolderName = sanitizeFileNamePart(path.basename(zipFile, path.extname(zipFile)), 'nested_zip');
+      let extractTarget = path.join(parentDir, zipFolderName);
+      let suffix = 2;
+      while (fs.existsSync(extractTarget)) {
+        extractTarget = path.join(parentDir, `${zipFolderName}_${suffix}`);
+        suffix += 1;
+      }
+
+      await fs.promises.mkdir(extractTarget, { recursive: true });
+      await execFileAsync('unzip', ['-qq', zipFile, '-d', extractTarget], { maxBuffer: 10 * 1024 * 1024 });
+      await fs.promises.unlink(zipFile).catch(() => {});
+      expandedCount += 1;
+    }
+  }
+}
+
+async function convertPdfPreviewToJpgBuffer(pdfPath, previewTempDir) {
+  const pdftoppm = await findCommand(['pdftoppm']);
+  if (!pdftoppm) {
+    const err = new Error('PDF conversion requires pdftoppm on this server.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const outputPrefix = path.join(previewTempDir, `${Date.now()}-${crypto.randomUUID()}`);
+  await execFileAsync(pdftoppm, ['-f', '1', '-singlefile', '-jpeg', '-r', '180', pdfPath, outputPrefix], {
+    maxBuffer: 10 * 1024 * 1024
+  });
+
+  return sharp(`${outputPrefix}.jpg`)
+    .rotate()
+    .jpeg({ quality: 90, mozjpeg: true })
+    .toBuffer();
+}
+
+async function convertOfficePreviewToJpgBuffer(inputPath, previewTempDir) {
+  const office = await findCommand(['libreoffice', 'soffice']);
+  if (!office) {
+    const err = new Error('Document conversion requires LibreOffice on this server.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const officeOutDir = await fs.promises.mkdtemp(path.join(previewTempDir, 'office-'));
+  await execFileAsync(office, ['--headless', '--convert-to', 'pdf', '--outdir', officeOutDir, inputPath], {
+    maxBuffer: 20 * 1024 * 1024
+  });
+
+  const pdfFiles = (await collectExtractedFiles(officeOutDir))
+    .filter((filePath) => isPdfFile(filePath));
+  if (!pdfFiles.length) {
+    const err = new Error('LibreOffice did not create a PDF preview.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  return convertPdfPreviewToJpgBuffer(pdfFiles[0], previewTempDir);
+}
+
+async function convertQuickLookPreviewToJpgBuffer(inputPath, previewTempDir) {
+  const qlmanage = await findCommand(['qlmanage']);
+  if (!qlmanage) {
+    const err = new Error('Quick Look preview is not available on this server.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const thumbnailDir = await fs.promises.mkdtemp(path.join(previewTempDir, 'thumb-'));
+  await execFileAsync(qlmanage, ['-t', '-s', '1800', '-o', thumbnailDir, inputPath], {
+    maxBuffer: 10 * 1024 * 1024
+  });
+
+  const thumbnails = await collectExtractedFiles(thumbnailDir);
+  if (!thumbnails.length) {
+    const err = new Error('No preview image was generated.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  return sharp(thumbnails[0])
+    .rotate()
+    .jpeg({ quality: 90, mozjpeg: true })
+    .toBuffer();
+}
+
+async function createJpgBaseBuffer(inputPath, previewTempDir) {
+  if (isConvertibleToJpg(inputPath)) {
+    return sharp(inputPath, { animated: false })
+      .rotate()
+      .jpeg({ quality: 90, mozjpeg: true })
+      .toBuffer();
+  }
+
+  if (process.platform === 'darwin') {
+    return convertQuickLookPreviewToJpgBuffer(inputPath, previewTempDir);
+  }
+
+  if (isPdfFile(inputPath)) {
+    return convertPdfPreviewToJpgBuffer(inputPath, previewTempDir);
+  }
+
+  return convertOfficePreviewToJpgBuffer(inputPath, previewTempDir);
+}
+
+async function convertFileToLabeledJpg(inputPath, outputPath, folderLabel, previewTempDir) {
+  const baseBuffer = await createJpgBaseBuffer(inputPath, previewTempDir);
+  const metadata = await sharp(baseBuffer).metadata();
+  const width = metadata.width || 1200;
+  const height = metadata.height || 800;
+  const label = sanitizeFileNamePart(folderLabel, 'root').replace(/_/g, ' ');
+  const fontSize = Math.max(18, Math.min(46, Math.round(width * 0.035)));
+  const margin = Math.max(12, Math.round(width * 0.018));
+  const labelHeight = Math.round(fontSize * 1.85);
+  const estimatedTextWidth = Math.round(label.length * fontSize * 0.58);
+  const maxLabelWidth = Math.max(1, width - (margin * 2));
+  const labelWidth = Math.min(maxLabelWidth, Math.max(fontSize * 4, estimatedTextWidth + (fontSize * 1.4)));
+  const textWidth = Math.max(1, labelWidth - Math.round(fontSize * 1.3));
+  const x = Math.max(margin, width - labelWidth - margin);
+  const y = Math.max(margin, height - labelHeight - margin);
+
+  const svg = Buffer.from(`
+    <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+      <rect x="${x}" y="${y}" width="${labelWidth}" height="${labelHeight}" rx="${Math.round(labelHeight / 4)}" fill="rgba(0,0,0,0.58)"/>
+      <text x="${x + Math.round(fontSize * 0.65)}" y="${y + Math.round(fontSize * 1.25)}"
+        fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="${fontSize}" font-weight="700"
+        textLength="${textWidth}" lengthAdjust="spacingAndGlyphs">${escapeXml(label)}</text>
+    </svg>
+  `);
+
+  await sharp(baseBuffer)
+    .composite([{ input: svg, top: 0, left: 0 }])
+    .jpeg({ quality: 90, mozjpeg: true })
+    .toFile(outputPath);
+}
+
+function getFolderLabelForRelativePath(relativePath) {
+  const parsed = path.parse(relativePath);
+  return path.basename(parsed.dir) || 'root';
+}
+
+function buildJpgOutputName(relativePath, fallbackIndex, usedNames) {
+  const parsed = path.parse(relativePath);
+  const parentName = getFolderLabelForRelativePath(relativePath);
+  const baseName = sanitizeFileNamePart(parsed.name, `file_${fallbackIndex}`);
+  const folderSuffix = parentName ? `_${sanitizeFileNamePart(parentName, 'folder')}` : '';
+  const preferredName = `${baseName}${folderSuffix}.jpg`;
+  const key = preferredName.toLowerCase();
+  const count = usedNames.get(key) || 0;
+  usedNames.set(key, count + 1);
+
+  if (count === 0) return preferredName;
+  return `${baseName}${folderSuffix}_${count + 1}.jpg`;
+}
+
+async function convertZipFilesToJpgDownload(zipPath, originalName) {
+  const workDir = await fs.promises.mkdtemp(path.join(zipConverterTempDir, 'job-'));
+  const extractDir = path.join(workDir, 'extract');
+  const inputBaseName = sanitizeFileNamePart(path.basename(originalName, path.extname(originalName)), 'converted');
+  const outputFolderName = `${inputBaseName}_jpg`;
+  const outputFolder = path.join(workDir, outputFolderName);
+  const previewTempDir = path.join(workDir, 'previews');
+  const outputZip = path.join(workDir, `${outputFolderName}.zip`);
+  await fs.promises.mkdir(extractDir, { recursive: true });
+  await fs.promises.mkdir(outputFolder, { recursive: true });
+  await fs.promises.mkdir(previewTempDir, { recursive: true });
+
+  await validateZipFile(zipPath);
+
+  await execFileAsync('unzip', ['-qq', zipPath, '-d', extractDir], { maxBuffer: 10 * 1024 * 1024 });
+  await expandNestedZips(extractDir);
+
+  const extractedFiles = await collectExtractedFiles(extractDir);
+  if (!extractedFiles.length) {
+    await removePathQuietly(workDir);
+    const err = new Error('The uploaded zip does not contain any files.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const convertFiles = extractedFiles.filter((filePath) => !isZipFile(filePath));
+  if (!convertFiles.length) {
+    await removePathQuietly(workDir);
+    const err = new Error('No files were found to convert in the uploaded zip.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const usedNames = new Map();
+  const failedFiles = [];
+  const convertedRecords = [];
+  let convertedCount = 0;
+
+  for (const [index, filePath] of convertFiles.entries()) {
+    try {
+      const relativePath = path.relative(extractDir, filePath);
+      const folderName = getFolderLabelForRelativePath(relativePath);
+      const outputName = buildJpgOutputName(relativePath, index + 1, usedNames);
+      await convertFileToLabeledJpg(filePath, path.join(outputFolder, outputName), folderName, previewTempDir);
+      convertedRecords.push({
+        folderName,
+        originalPath: relativePath,
+        originalFileName: path.basename(filePath),
+        outputFileName: outputName,
+        sourceType: isConvertibleToJpg(filePath) ? 'Image' : 'Preview'
+      });
+      convertedCount += 1;
+    } catch (_err) {
+      failedFiles.push(path.relative(extractDir, filePath));
+    }
+  }
+
+  if (failedFiles.length) {
+    await removePathQuietly(workDir);
+    const preview = failedFiles.slice(0, 5).join(', ');
+    const err = new Error(`These files could not be converted to JPG: ${preview}${failedFiles.length > 5 ? '...' : ''}`);
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const folderNames = [...new Set(convertedRecords.map((record) => record.folderName))].sort((a, b) => a.localeCompare(b));
+  const workbook = XLSX.utils.book_new();
+  const folderSheetRows = [
+    ['S.No', 'Folder Name', 'Converted File Count'],
+    ...folderNames.map((folderName, index) => [
+      index + 1,
+      folderName,
+      convertedRecords.filter((record) => record.folderName === folderName).length
+    ])
+  ];
+  const fileSheetRows = [
+    ['S.No', 'Folder Name', 'Original Path', 'Original File Name', 'Output JPG File Name', 'Source Type'],
+    ...convertedRecords.map((record, index) => [
+      index + 1,
+      record.folderName,
+      record.originalPath,
+      record.originalFileName,
+      record.outputFileName,
+      record.sourceType
+    ])
+  ];
+  const folderSheet = XLSX.utils.aoa_to_sheet(folderSheetRows);
+  const fileSheet = XLSX.utils.aoa_to_sheet(fileSheetRows);
+  folderSheet['!cols'] = [{ wch: 8 }, { wch: 32 }, { wch: 22 }];
+  fileSheet['!cols'] = [{ wch: 8 }, { wch: 32 }, { wch: 60 }, { wch: 36 }, { wch: 42 }, { wch: 14 }];
+  XLSX.utils.book_append_sheet(workbook, folderSheet, 'Folder Names');
+  XLSX.utils.book_append_sheet(workbook, fileSheet, 'Converted Files');
+  XLSX.writeFile(workbook, path.join(outputFolder, 'conversion_record.xlsx'));
+
+  await execFileAsync('zip', ['-qr', outputZip, outputFolderName], { cwd: workDir, maxBuffer: 10 * 1024 * 1024 });
+
+  return {
+    workDir,
+    outputZip,
+    downloadName: `${outputFolderName}.zip`,
+    fileCount: convertedCount
+  };
+}
+
 // ─── Login ───
 app.post('/api/login', async (req, res) => {
   try {
@@ -290,6 +684,35 @@ app.get('/api/users', auth, adminOnly, async (req, res) => {
     const users = await User.find({}, { password: 0 }).sort({ createdAt: -1 }).lean();
     res.json(users);
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/admin/zip-flatten', auth, adminOnly, (req, res) => {
+  zipUpload.single('zipFile')(req, res, async (uploadErr) => {
+    let result;
+    try {
+      if (uploadErr) {
+        return res.status(400).json({ error: uploadErr.message || 'Zip upload failed.' });
+      }
+      if (!req.file) {
+        return res.status(400).json({ error: 'No zip file uploaded.' });
+      }
+
+      result = await convertZipFilesToJpgDownload(req.file.path, req.file.originalname);
+      res.setHeader('X-Converted-File-Count', String(result.fileCount));
+      return res.download(result.outputZip, result.downloadName, async (downloadErr) => {
+        await removePathQuietly(result.workDir);
+        await removePathQuietly(req.file.path);
+        if (downloadErr && !res.headersSent) {
+          res.status(500).json({ error: 'Download failed: ' + downloadErr.message });
+        }
+      });
+    } catch (err) {
+      await removePathQuietly(result?.workDir);
+      await removePathQuietly(req.file?.path);
+      const status = err.statusCode || 500;
+      return res.status(status).json({ error: err.message || 'Zip conversion failed.' });
+    }
+  });
 });
 
 app.get('/api/photography/session', auth, photographyAccessOnly, async (req, res) => {
