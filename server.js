@@ -1851,7 +1851,7 @@ function buildEmailHTML(years, campuses, results) {
   <p style="font-size:14px;color:#1e293b;margin-bottom:16px;font-weight:500;">
     Hon'ble Sir,<br><br>
     Kindly find the admission data for <strong>${campusSummary}</strong>
-    at <strong>5:30 pm</strong> till <strong>${dateStr}</strong>.
+    at <strong>7:00 PM</strong> till <strong>${dateStr}</strong>.
   </p>
 
   <div style=";border-radius:12px;padding:20px 24px;margin-bottom:16px;">
