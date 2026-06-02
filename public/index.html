@@ -160,6 +160,14 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg)
 .section-title{font-size:15px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px;}
 .section-title .icon{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px;}
 .section-body{padding:20px 24px;}
+.admin-collapsible .section-header{cursor:pointer;padding:12px 18px;}
+.admin-collapsible .section-body{padding:14px 18px;}
+.admin-collapsible.collapsed .section-body{display:none;}
+.admin-collapsible.collapsed .section-header{border-bottom:none;}
+.admin-toggle-btn{margin-left:auto;background:var(--bg);color:var(--text-secondary);border:1px solid var(--border);padding:4px 10px;font-size:11px;border-radius:999px;box-shadow:none;}
+.admin-toggle-btn:hover{background:var(--accent-light);color:var(--accent);border-color:var(--accent-light);box-shadow:none;transform:none;}
+.admin-collapsible.collapsed .admin-toggle-icon{transform:rotate(-90deg);}
+.admin-toggle-icon{display:inline-block;transition:transform .15s ease;}
 
 /* ─── Buttons ─── */
 button,.btn{padding:8px 18px;background:var(--accent);color:white;border:none;border-radius:var(--radius);cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;transition:all .15s;display:inline-flex;align-items:center;gap:6px;line-height:1.4;}
@@ -266,6 +274,10 @@ tbody tr{transition:background .1s;}
 .db-count-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:var(--success-light);border:1px solid #86efac;border-radius:20px;font-size:14px;font-weight:700;color:var(--success-dark);}
 .upload-group{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
 .upload-status{font-size:12px;font-weight:600;}
+#dbStatus .section-body{padding-top:12px;padding-bottom:12px;}
+#dbStatus .db-status-bar{gap:8px;}
+#dbStatus .upload-group{gap:8px;}
+#dbStatus .upload-status{min-height:16px;margin-top:6px!important;}
 
 /* ─── User Management ─── */
 .user-mgmt-header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
@@ -1199,6 +1211,7 @@ function switchView(view){
   if(view==='admin'){
     document.getElementById('viewAdmin').classList.remove('hidden');
     document.getElementById('navAdmin').classList.add('active');
+    initAdminAccordions();
   }
   else if(view==='compare'){
     document.getElementById('viewCompare').classList.remove('hidden');
@@ -1249,6 +1262,49 @@ function switchView(view){
 
 function showLoading(text){ document.getElementById('loadingText').textContent=text||'Loading data...'; document.getElementById('loadingOverlay').classList.add('show'); }
 function hideLoading(){ document.getElementById('loadingOverlay').classList.remove('show'); }
+
+let adminAccordionsReady=false;
+function initAdminAccordions(){
+  const cards=[...document.querySelectorAll('#viewAdmin .section-card.admin-only')];
+  if(!cards.length) return;
+  cards.forEach(card=>{
+    card.classList.add('admin-collapsible');
+    const header=card.querySelector(':scope > .section-header');
+    if(!header) return;
+    if(!header.querySelector('.admin-toggle-btn')){
+      const btn=document.createElement('button');
+      btn.type='button';
+      btn.className='admin-toggle-btn';
+      btn.innerHTML='<span class="admin-toggle-icon">▾</span> <span class="admin-toggle-label">Open</span>';
+      btn.onclick=e=>{ e.stopPropagation(); toggleAdminSection(card); };
+      header.appendChild(btn);
+    }
+    if(!adminAccordionsReady){
+      card.classList.toggle('collapsed',card.id!=='dbStatus');
+    }
+    header.onclick=e=>{
+      if(e.target.closest('button,a,input,select,label')) return;
+      toggleAdminSection(card);
+    };
+    updateAdminToggleLabel(card);
+  });
+  adminAccordionsReady=true;
+}
+
+function toggleAdminSection(card){
+  const wasCollapsed=card.classList.contains('collapsed');
+  document.querySelectorAll('#viewAdmin .section-card.admin-collapsible').forEach(section=>{
+    section.classList.add('collapsed');
+    updateAdminToggleLabel(section);
+  });
+  if(wasCollapsed) card.classList.remove('collapsed');
+  updateAdminToggleLabel(card);
+}
+
+function updateAdminToggleLabel(card){
+  const label=card.querySelector('.admin-toggle-label');
+  if(label) label.textContent=card.classList.contains('collapsed')?'Open':'Close';
+}
 
 async function loadDBCount(){
   try{ const r=await authFetch('/api/count'); const d=await r.json(); document.getElementById('dbCount').textContent=d.count+' records'; }
