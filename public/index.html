@@ -578,6 +578,33 @@ tbody tr{transition:background .1s;}
         <div id="zipConvertStatus" class="upload-status" style="margin-top:10px;"></div>
       </div>
     </div>
+
+    <div class="section-card admin-only" id="courseAdmissionReport" style="display:none;">
+      <div class="section-header">
+        <div class="section-title"><span class="icon" style="background:var(--success-light);color:var(--success-dark);">📄</span>Course Admission Report</div>
+      </div>
+      <div class="section-body">
+        <p style="color:var(--text-muted);font-size:12px;margin-bottom:14px;">Download a PDF showing the admitted-student count for every course in the selected admission-date range.</p>
+        <div class="upload-group">
+          <label>Start Date</label>
+          <input type="date" id="courseReportStartDate">
+          <label>End Date</label>
+          <input type="date" id="courseReportEndDate">
+          <label>Campus</label>
+          <select id="courseReportCampus">
+            <option value="ALL">All Campuses</option>
+            <option value="GEU">GEU</option>
+            <option value="GEHU">GEHU - All Campuses</option>
+            <option value="GEHUDDN">GEHU - Dehradun</option>
+            <option value="GEHUHLD">GEHU - Haldwani</option>
+            <option value="GEHUBTL">GEHU - Bhimtal</option>
+          </select>
+          <button class="btn-success btn-sm" id="courseReportBtn" onclick="downloadCourseAdmissionReport()">⬇ Create Course Report</button>
+          <button class="btn-purple btn-sm" id="sendCourseReportBtn" onclick="openCourseReportEmailModal()">📧 Send Report</button>
+        </div>
+        <div id="courseReportStatus" class="upload-status" style="margin-top:10px;"></div>
+      </div>
+    </div>
   </div>
 
   <div class="section-card admin-only" id="daywiseCompareSection" style="display:none;">
@@ -920,6 +947,37 @@ tbody tr{transition:background .1s;}
 </div>
 </div>
 
+<!-- ═══════════ COURSE REPORT EMAIL MODAL ═══════════ -->
+<div class="report-modal-overlay" id="courseReportEmailOverlay" onclick="closeCourseReportEmailModal(event)">
+<div class="report-modal" onclick="event.stopPropagation()" style="width:min(620px,94vw);height:auto;max-height:86vh;">
+  <div class="report-modal-header">
+    <h2>📧 Send Course Admission Report</h2>
+    <button class="report-modal-close" onclick="closeCourseReportEmailModal()">&times;</button>
+  </div>
+  <div class="report-left" style="border-right:none;overflow-y:auto;">
+    <div id="courseReportEmailSummary" style="font-size:12px;line-height:1.7;color:#cbd5e1;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px 12px;"></div>
+    <div>
+      <div class="chip-group-label">To: Recipients</div>
+      <div class="tag-input-wrap" id="courseReportToTagWrap" onclick="document.getElementById('courseReportToTagInput').focus()">
+        <input class="tag-input-field" id="courseReportToTagInput" placeholder="Type email, press Enter..." onkeydown="handleCourseReportTagKey(event,'to')" oninput="handleCourseReportTagInput(event,'to')" onblur="addCourseReportEmailTokens('to',this.value)">
+      </div>
+    </div>
+    <div>
+      <div class="chip-group-label">CC: (optional)</div>
+      <div class="tag-input-wrap" id="courseReportCcTagWrap" onclick="document.getElementById('courseReportCcTagInput').focus()">
+        <input class="tag-input-field" id="courseReportCcTagInput" placeholder="Type email, press Enter..." onkeydown="handleCourseReportTagKey(event,'cc')" oninput="handleCourseReportTagInput(event,'cc')" onblur="addCourseReportEmailTokens('cc',this.value)">
+      </div>
+    </div>
+    <div class="help-text">Recipients are saved when added or removed. You can also paste multiple emails separated by commas or semicolons.</div>
+    <div class="report-action-row">
+      <button class="btn-save-settings" onclick="saveCourseReportRecipients()">💾 Save Recipients</button>
+      <button class="btn-send-email" id="courseReportSendEmailBtn" onclick="sendCourseAdmissionReportEmail()">📧 Send Mail</button>
+    </div>
+    <div class="report-status-msg" id="courseReportEmailStatus"></div>
+  </div>
+</div>
+</div>
+
 <!-- ═══════════ SEND REPORT MODAL ═══════════ -->
 <div class="report-modal-overlay" id="reportModalOverlay" onclick="closeReportModal(event)">
 <div class="report-modal" onclick="event.stopPropagation()">
@@ -1195,6 +1253,184 @@ function hideLoading(){ document.getElementById('loadingOverlay').classList.remo
 async function loadDBCount(){
   try{ const r=await authFetch('/api/count'); const d=await r.json(); document.getElementById('dbCount').textContent=d.count+' records'; }
   catch(e){ document.getElementById('dbCount').textContent='Error'; }
+}
+
+async function downloadCourseAdmissionReport(){
+  const startDate=document.getElementById('courseReportStartDate').value;
+  const endDate=document.getElementById('courseReportEndDate').value;
+  const campus=document.getElementById('courseReportCampus').value||'ALL';
+  const status=document.getElementById('courseReportStatus');
+  const btn=document.getElementById('courseReportBtn');
+  if(!startDate||!endDate){ alert('Please select both start date and end date.'); return; }
+  if(endDate<startDate){ alert('End date must be on or after the start date.'); return; }
+  status.textContent='Creating PDF report...';
+  status.style.color='var(--text-muted)';
+  btn.disabled=true;
+  try{
+    const params=new URLSearchParams({startDate,endDate,campus});
+    const r=await authFetch('/api/admin/course-admission-report.pdf?'+params.toString());
+    if(!r.ok){
+      const d=await r.json().catch(()=>({}));
+      throw new Error(d.error||'Could not create report');
+    }
+    const blob=await r.blob();
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;
+    a.download='course-admission-report-'+campus.toLowerCase()+'-'+startDate+'-to-'+endDate+'.pdf';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    status.textContent='✓ Course admission PDF downloaded.';
+    status.style.color='var(--success-dark)';
+  }catch(e){
+    status.textContent='✕ '+e.message;
+    status.style.color='var(--danger)';
+  }finally{ btn.disabled=false; }
+}
+
+let courseReportToEmails=[];
+let courseReportCcEmails=[];
+
+function getCourseReportEmailArray(type){
+  return type==='to'?courseReportToEmails:courseReportCcEmails;
+}
+
+function flushCourseReportTypedEmails(){
+  ['to','cc'].forEach(type=>{
+    const input=document.getElementById('courseReport'+(type==='to'?'To':'Cc')+'TagInput');
+    if(input&&input.value.trim()) addCourseReportEmailTokens(type,input.value);
+  });
+}
+
+function renderCourseReportTags(type){
+  const prefix=type==='to'?'To':'Cc';
+  const wrap=document.getElementById('courseReport'+prefix+'TagWrap');
+  const input=document.getElementById('courseReport'+prefix+'TagInput');
+  [...wrap.querySelectorAll('.email-tag')].forEach(tag=>tag.remove());
+  getCourseReportEmailArray(type).forEach(email=>{
+    const tag=document.createElement('span');
+    tag.className='email-tag';
+    tag.appendChild(document.createTextNode(email+' '));
+    const remove=document.createElement('span');
+    remove.className='remove-tag';
+    remove.textContent='×';
+    remove.onclick=()=>removeCourseReportTag(type,email);
+    tag.appendChild(remove);
+    wrap.insertBefore(tag,input);
+  });
+}
+
+function addCourseReportEmailTokens(type,raw){
+  const emails=extractEmails(raw);
+  const arr=getCourseReportEmailArray(type);
+  emails.forEach(email=>{ if(!arr.includes(email)) arr.push(email); });
+  const prefix=type==='to'?'To':'Cc';
+  document.getElementById('courseReport'+prefix+'TagInput').value='';
+  renderCourseReportTags(type);
+  persistCourseReportRecipientsSilent();
+}
+
+function removeCourseReportTag(type,email){
+  if(type==='to') courseReportToEmails=courseReportToEmails.filter(value=>value!==email);
+  else courseReportCcEmails=courseReportCcEmails.filter(value=>value!==email);
+  renderCourseReportTags(type);
+  persistCourseReportRecipientsSilent();
+}
+
+function handleCourseReportTagKey(e,type){
+  if(e.key==='Enter'||e.key===','||e.key===';'){
+    e.preventDefault();
+    addCourseReportEmailTokens(type,e.target.value);
+  }
+}
+
+function handleCourseReportTagInput(e,type){
+  if(e.target.value.includes(',')||e.target.value.includes(';')){
+    addCourseReportEmailTokens(type,e.target.value);
+  }
+}
+
+async function persistCourseReportRecipientsSilent(){
+  try{
+    await authFetch('/api/admin/course-admission-report-settings',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({toEmails:courseReportToEmails,ccEmails:courseReportCcEmails})
+    });
+  }catch(e){ console.warn('Could not auto-save course report recipients:',e.message); }
+}
+
+function showCourseReportEmailStatus(message,type){
+  const status=document.getElementById('courseReportEmailStatus');
+  status.textContent=message;
+  status.className='report-status-msg '+(type||'');
+  status.style.display='block';
+}
+
+async function openCourseReportEmailModal(){
+  const startDate=document.getElementById('courseReportStartDate').value;
+  const endDate=document.getElementById('courseReportEndDate').value;
+  const campusSelect=document.getElementById('courseReportCampus');
+  if(!startDate||!endDate){ alert('Please select both start date and end date.'); return; }
+  if(endDate<startDate){ alert('End date must be on or after the start date.'); return; }
+  document.getElementById('courseReportEmailSummary').textContent='Admission date range: '+startDate+' to '+endDate+' | Campus: '+campusSelect.options[campusSelect.selectedIndex].text;
+  document.getElementById('courseReportEmailStatus').style.display='none';
+  document.getElementById('courseReportEmailOverlay').classList.add('show');
+  try{
+    const r=await authFetch('/api/admin/course-admission-report-settings');
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Could not load saved recipients');
+    courseReportToEmails=d.toEmails||[];
+    courseReportCcEmails=d.ccEmails||[];
+    renderCourseReportTags('to');
+    renderCourseReportTags('cc');
+  }catch(e){ showCourseReportEmailStatus(e.message,'error'); }
+}
+
+function closeCourseReportEmailModal(e){
+  if(!e||e.target===document.getElementById('courseReportEmailOverlay'))
+    document.getElementById('courseReportEmailOverlay').classList.remove('show');
+}
+
+async function saveCourseReportRecipients(){
+  flushCourseReportTypedEmails();
+  try{
+    const r=await authFetch('/api/admin/course-admission-report-settings',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({toEmails:courseReportToEmails,ccEmails:courseReportCcEmails})
+    });
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Could not save recipients');
+    showCourseReportEmailStatus('Recipients saved.','success');
+  }catch(e){ showCourseReportEmailStatus(e.message,'error'); }
+}
+
+async function sendCourseAdmissionReportEmail(){
+  flushCourseReportTypedEmails();
+  if(!courseReportToEmails.length){ showCourseReportEmailStatus('Add at least one To recipient.','error'); return; }
+  const btn=document.getElementById('courseReportSendEmailBtn');
+  btn.disabled=true;
+  showCourseReportEmailStatus('Sending PDF report...','');
+  try{
+    const r=await authFetch('/api/admin/course-admission-report/send',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        startDate:document.getElementById('courseReportStartDate').value,
+        endDate:document.getElementById('courseReportEndDate').value,
+        campus:document.getElementById('courseReportCampus').value||'ALL',
+        toEmails:courseReportToEmails,
+        ccEmails:courseReportCcEmails
+      })
+    });
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Could not send report');
+    showCourseReportEmailStatus('Course admission PDF sent successfully.','success');
+  }catch(e){ showCourseReportEmailStatus(e.message,'error'); }
+  finally{ btn.disabled=false; }
 }
 
 async function uploadCSV(){

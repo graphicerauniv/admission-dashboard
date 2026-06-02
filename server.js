@@ -1646,6 +1646,8 @@ const emailSettingsSchema = new mongoose.Schema({
   key: { type: String, default: 'report_settings', unique: true },
   toEmails: [{ type: String, trim: true, lowercase: true }],
   ccEmails: [{ type: String, trim: true, lowercase: true }],
+  courseReportToEmails: [{ type: String, trim: true, lowercase: true }],
+  courseReportCcEmails: [{ type: String, trim: true, lowercase: true }],
   mode: { type: String, enum: ['regular', 'online'], default: 'regular' },
   campuses: [{ type: String, trim: true }],
   years: [{ type: Number }],
@@ -1689,6 +1691,40 @@ app.post('/api/email-settings', auth, adminOnly, async (req, res) => {
     );
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+function normalizeEmailList(value) {
+  const emails = Array.isArray(value) ? value : [];
+  return [...new Set(emails
+    .map(email => String(email || '').trim().toLowerCase())
+    .filter(email => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)))];
+}
+
+app.get('/api/admin/course-admission-report-settings', auth, adminOnly, async (_req, res) => {
+  try {
+    const settings = await EmailSettings.findOne({ key: 'report_settings' }).lean();
+    res.json({
+      toEmails: settings?.courseReportToEmails || [],
+      ccEmails: settings?.courseReportCcEmails || []
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/course-admission-report-settings', auth, adminOnly, async (req, res) => {
+  try {
+    const toEmails = normalizeEmailList(req.body?.toEmails);
+    const ccEmails = normalizeEmailList(req.body?.ccEmails);
+    await EmailSettings.findOneAndUpdate(
+      { key: 'report_settings' },
+      { courseReportToEmails: toEmails, courseReportCcEmails: ccEmails, updatedAt: new Date() },
+      { upsert: true, new: true }
+    );
+    res.json({ success: true, toEmails, ccEmails });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ─── Campus query helpers ───
@@ -2173,6 +2209,275 @@ function buildDateFilter(dateField, start, end, extra) {
   return q;
 }
 
+function parseISODateParam(value, endOfDay = false) {
+  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const year = parseInt(match[1], 10);
+  const month = parseInt(match[2], 10);
+  const day = parseInt(match[3], 10);
+  const date = new Date(Date.UTC(year, month - 1, day, endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+  return date;
+}
+
+function courseReportCampusLabel(value) {
+  const campus = String(value || 'ALL').toUpperCase();
+  if (campus === 'ALL') return 'All Campuses';
+  if (campus === 'GEHU') return 'GEHU - All Campuses';
+  return displayCampus(campus);
+}
+
+function pdfEscape(value) {
+  return String(value || '')
+    .normalize('NFKD')
+    .replace(/[^\x20-\x7E]/g, '')
+    .replace(/\\/g, '\\\\')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)');
+}
+
+function pdfText(text, x, y, size = 10, font = 'F1') {
+  return `BT /${font} ${size} Tf ${x} ${y} Td (${pdfEscape(text)}) Tj ET`;
+}
+
+function wrapPdfText(value, maxChars) {
+  const words = String(value || '').trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return ['-'];
+  const lines = [];
+  let line = '';
+  words.forEach(word => {
+    if (!line) {
+      line = word;
+      return;
+    }
+    if (`${line} ${word}`.length <= maxChars) {
+      line += ` ${word}`;
+    } else {
+      lines.push(line);
+      line = word;
+    }
+  });
+  if (line) lines.push(line);
+  return lines;
+}
+
+function buildCourseAdmissionReportPdf({ startDate, endDate, campus, courses, totalAdmissions }) {
+  const pageWidth = 595;
+  const pageHeight = 842;
+  const margin = 42;
+  const tableTop = 692;
+  const tableBottom = 66;
+  const rowLineHeight = 13;
+  const courseWidthChars = 76;
+  const pages = [];
+  let pageRows = [];
+  let usedHeight = 0;
+
+  const flushPage = () => {
+    pages.push(pageRows);
+    pageRows = [];
+    usedHeight = 0;
+  };
+
+  courses.forEach((course, index) => {
+    const lines = wrapPdfText(course.course, courseWidthChars);
+    const rowHeight = Math.max(22, lines.length * rowLineHeight + 8);
+    if (pageRows.length && usedHeight + rowHeight > tableTop - tableBottom) flushPage();
+    pageRows.push({ index: index + 1, ...course, lines, rowHeight });
+    usedHeight += rowHeight;
+  });
+  if (pageRows.length || !pages.length) flushPage();
+
+  const contentStreams = pages.map((rows, pageIndex) => {
+    const commands = [];
+    commands.push('0.12 0.20 0.36 rg 0 770 595 72 re f');
+    commands.push(pdfText('GEU ADMISSIONS', margin, 810, 16, 'F2'));
+    commands.push(pdfText('Course-wise Admission Report', margin, 787, 20, 'F2'));
+    commands.push('0 0 0 rg');
+    commands.push(pdfText(`Admission date range: ${startDate} to ${endDate}`, margin, 744, 11, 'F2'));
+    commands.push(pdfText(`Campus: ${courseReportCampusLabel(campus)}`, margin, 726, 10));
+    commands.push(pdfText(`Total admitted students: ${totalAdmissions}`, 352, 726, 10, 'F2'));
+    commands.push('0.90 0.93 0.97 rg 42 692 511 24 re f');
+    commands.push('0 0 0 rg');
+    commands.push(pdfText('S. No.', 51, 701, 10, 'F2'));
+    commands.push(pdfText('Course', 103, 701, 10, 'F2'));
+    commands.push(pdfText('Admissions', 482, 701, 10, 'F2'));
+
+    let y = tableTop;
+    rows.forEach(row => {
+      y -= row.rowHeight;
+      commands.push('0.82 0.85 0.89 RG 42 ' + y + ' 511 ' + row.rowHeight + ' re S');
+      commands.push(pdfText(row.index, 56, y + row.rowHeight - 15, 9));
+      row.lines.forEach((line, lineIndex) => {
+        commands.push(pdfText(line, 103, y + row.rowHeight - 15 - (lineIndex * rowLineHeight), 9));
+      });
+      commands.push(pdfText(row.count, 507, y + row.rowHeight - 15, 9, 'F2'));
+    });
+
+    if (pageIndex === pages.length - 1) {
+      const totalY = Math.max(42, y - 26);
+      commands.push('0.90 0.93 0.97 rg 42 ' + totalY + ' 511 22 re f');
+      commands.push('0 0 0 rg');
+      commands.push(pdfText('TOTAL ADMISSIONS', 103, totalY + 7, 10, 'F2'));
+      commands.push(pdfText(totalAdmissions, 507, totalY + 7, 10, 'F2'));
+    }
+
+    commands.push('0 0 0 rg');
+    commands.push(pdfText(`Generated on ${new Date().toISOString().slice(0, 10)} | Page ${pageIndex + 1} of ${pages.length}`, margin, 30, 8));
+    return commands.join('\n');
+  });
+
+  const objects = [];
+  const addObject = value => {
+    objects.push(value);
+    return objects.length;
+  };
+  const catalogId = addObject('');
+  const pagesId = addObject('');
+  const fontId = addObject('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+  const boldFontId = addObject('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>');
+  const pageIds = [];
+
+  contentStreams.forEach(stream => {
+    const contentId = addObject(`<< /Length ${Buffer.byteLength(stream, 'latin1')} >>\nstream\n${stream}\nendstream`);
+    const pageId = addObject(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 ${fontId} 0 R /F2 ${boldFontId} 0 R >> >> /Contents ${contentId} 0 R >>`);
+    pageIds.push(pageId);
+  });
+
+  objects[catalogId - 1] = `<< /Type /Catalog /Pages ${pagesId} 0 R >>`;
+  objects[pagesId - 1] = `<< /Type /Pages /Kids [${pageIds.map(id => `${id} 0 R`).join(' ')}] /Count ${pageIds.length} >>`;
+
+  let pdf = '%PDF-1.4\n';
+  const offsets = [0];
+  objects.forEach((object, index) => {
+    offsets.push(Buffer.byteLength(pdf, 'latin1'));
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+  const xrefOffset = Buffer.byteLength(pdf, 'latin1');
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  offsets.slice(1).forEach(offset => {
+    pdf += `${String(offset).padStart(10, '0')} 00000 n \n`;
+  });
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root ${catalogId} 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  return Buffer.from(pdf, 'latin1');
+}
+
+async function getCourseAdmissionReportData({ startDate, endDate, campus }) {
+  const start = parseISODateParam(startDate);
+  const end = parseISODateParam(endDate, true);
+  const allowedCampuses = ['ALL', 'GEU', 'GEHU', 'GEHUDDN', 'GEHUHLD', 'GEHUBTL'];
+  if (!start || !end || end < start) {
+    const err = new Error('Select a valid start date and end date.');
+    err.statusCode = 400;
+    throw err;
+  }
+  if (!allowedCampuses.includes(campus)) {
+    const err = new Error('Select a valid campus.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const match = { admissionDateParsed: { $gte: start, $lte: end } };
+  if (campus !== 'ALL') addAndFilter(match, campusFilterQuery(campus, ['admittedCenter', 'campus']));
+  const grouped = await Student.aggregate([
+    { $match: match },
+    { $group: { _id: '$courseName', count: { $sum: 1 } } }
+  ]);
+  const countsByCourse = new Map();
+  grouped.forEach(item => {
+    const course = String(item._id || '').trim() || 'Course Not Specified';
+    countsByCourse.set(course, (countsByCourse.get(course) || 0) + item.count);
+  });
+  const courses = [...countsByCourse.entries()]
+    .map(([course, count]) => ({ course, count }))
+    .sort((a, b) => b.count - a.count || a.course.localeCompare(b.course));
+  const totalAdmissions = courses.reduce((sum, row) => sum + row.count, 0);
+  return { courses, totalAdmissions };
+}
+
+function createCourseReportTransporter() {
+  if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) {
+    return {
+      fromAddr: process.env.GMAIL_USER,
+      transporter: nodemailer.createTransport({
+        service: 'gmail',
+        auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD }
+      })
+    };
+  }
+  const email = process.env.OUTLOOK_EMAIL1 || process.env.OUTLOOK_EMAIL;
+  const password = process.env.OUTLOOK_PASSWORD1 || process.env.OUTLOOK_PASSWORD;
+  if (!email || !password) {
+    throw new Error('No email credentials found in .env. Set Gmail or Outlook SMTP credentials.');
+  }
+  return {
+    fromAddr: email,
+    transporter: nodemailer.createTransport({
+      host: 'smtp.office365.com',
+      port: 587,
+      secure: false,
+      auth: { user: email, pass: password },
+      tls: { ciphers: 'SSLv3', rejectUnauthorized: false }
+    })
+  };
+}
+
+app.get('/api/admin/course-admission-report.pdf', auth, adminOnly, async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const campus = String(req.query.campus || 'ALL').toUpperCase();
+    const { courses, totalAdmissions } = await getCourseAdmissionReportData({ startDate, endDate, campus });
+    const pdf = buildCourseAdmissionReportPdf({ startDate, endDate, campus, courses, totalAdmissions });
+    const safeCampus = campus === 'ALL' ? 'all-campuses' : campus.toLowerCase();
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="course-admission-report-${safeCampus}-${startDate}-to-${endDate}.pdf"`,
+      'Content-Length': pdf.length
+    });
+    res.send(pdf);
+  } catch (err) {
+    console.error('Course admission PDF report error:', err);
+    res.status(err.statusCode || 500).json({ error: 'Could not create course admission report: ' + err.message });
+  }
+});
+
+app.post('/api/admin/course-admission-report/send', auth, adminOnly, async (req, res) => {
+  try {
+    const { startDate, endDate } = req.body || {};
+    const campus = String(req.body?.campus || 'ALL').toUpperCase();
+    const toEmails = normalizeEmailList(req.body?.toEmails);
+    const ccEmails = normalizeEmailList(req.body?.ccEmails);
+    if (!toEmails.length) return res.status(400).json({ error: 'Add at least one To recipient.' });
+
+    const { courses, totalAdmissions } = await getCourseAdmissionReportData({ startDate, endDate, campus });
+    const pdf = buildCourseAdmissionReportPdf({ startDate, endDate, campus, courses, totalAdmissions });
+    await EmailSettings.findOneAndUpdate(
+      { key: 'report_settings' },
+      { courseReportToEmails: toEmails, courseReportCcEmails: ccEmails, updatedAt: new Date() },
+      { upsert: true, new: true }
+    );
+
+    const { transporter, fromAddr } = createCourseReportTransporter();
+    const safeCampus = campus === 'ALL' ? 'all-campuses' : campus.toLowerCase();
+    await transporter.sendMail({
+      from: `"GEU Admissions Dashboard" <${fromAddr}>`,
+      to: toEmails.join(', '),
+      cc: ccEmails.length ? ccEmails.join(', ') : undefined,
+      subject: `GEU Course Admission Report | ${courseReportCampusLabel(campus)} | ${startDate} to ${endDate}`,
+      html: `<p>Dear Sir/Madam,</p><p>Please find attached the course-wise admission report for <strong>${courseReportCampusLabel(campus)}</strong> from <strong>${startDate}</strong> to <strong>${endDate}</strong>.</p><p>Total admitted students: <strong>${totalAdmissions}</strong></p>`,
+      attachments: [{
+        filename: `course-admission-report-${safeCampus}-${startDate}-to-${endDate}.pdf`,
+        content: pdf,
+        contentType: 'application/pdf'
+      }]
+    });
+    res.json({ success: true, sentTo: toEmails, cc: ccEmails });
+  } catch (err) {
+    console.error('Send course admission PDF report error:', err);
+    res.status(err.statusCode || 500).json({ error: 'Could not send course admission report: ' + err.message });
+  }
+});
+
 const mapDoc = (s, campusField, dateStrField) => ({
   _id: s._id, sid: s.studentId, name: s.name, course: s.courseName, courseType: s.courseType,
   status: s.applicationStatus, gender: s.gender, mobile: s.mobile, email: s.email,
@@ -2208,7 +2513,7 @@ app.get('/api/students', auth, dashboardOnly, featureOnly('dashboard'), async (r
         const codes = [...new Set(allRaw.map(normalizeCampus))].filter(Boolean);
         return codes.map(displayCampus).sort();
       }),
-      Student.distinct('courseName', scopedModeQ).then(arr => arr.filter(Boolean).sort()),
+      Student.distinct('courseName', scopedModeQ).then(courses => courses.filter(Boolean).sort((a, b) => a.localeCompare(b))),
       Student.aggregate([{ $match: buildDateFilter('enquiryDateParsed', start, end, { mode, accessCampus }) }, { $project: { y: { $year: '$enquiryDateParsed' } } }, { $group: { _id: '$y' } }, { $sort: { _id: 1 } }]).then(async enqYears => {
         const regYears = await Student.aggregate([{ $match: buildDateFilter('registrationDateParsed', start, end, { mode, accessCampus }) }, { $project: { y: { $year: '$registrationDateParsed' } } }, { $group: { _id: '$y' } }]);
         const admYears = await Student.aggregate([{ $match: buildDateFilter('admissionDateParsed', start, end, { mode, accessCampus }) }, { $project: { y: { $year: '$admissionDateParsed' } } }, { $group: { _id: '$y' } }]);
