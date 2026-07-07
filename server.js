@@ -2395,6 +2395,204 @@ async function getCourseAdmissionReportData({ startDate, endDate, campus }) {
   return { courses, totalAdmissions };
 }
 
+const comparisonCourseGroups = [
+  {
+    label: 'B.Tech CSE',
+    courses2026: ['B.Tech CSE'],
+    courses2025: ['B.Tech CSE']
+  },
+  {
+    label: 'B.Tech CSE AI & ML',
+    courses2026: ['B.Tech CSE (Hons.) with specialization in AI & ML', 'B.Tech CSE AI & ML'],
+    courses2025: ['B.Tech CSE AI & ML', 'B.Tech CSE (Hons.) with specialization in AI & ML']
+  },
+  {
+    label: 'B.Tech CSE AI & DS',
+    courses2026: ['B.Tech CSE (Hons.) with specialization in AI & DS', 'B.Tech CSE AI & DS'],
+    courses2025: ['B.Tech CSE (Hons.) with specialization in AI & DS', 'B.Tech CSE AI & DS']
+  },
+  {
+    label: 'B.Tech CSE Regional Language Quota',
+    courses2026: ['B.Tech CSE Regional Language Quota'],
+    courses2025: ['B.TECH: CSE (REGIONAL)']
+  },
+  {
+    label: 'B.Tech CSE Cyber Security',
+    courses2026: ['B.Tech CSE (Hons.) with specialization in Cyber Security', 'B.Tech CSE Cyber Security'],
+    courses2025: ['B.Tech CSE Cyber Security', 'B.Tech CSE (Hons.) with specialization in Cyber Security']
+  },
+  {
+    label: 'MBA',
+    courses2026: [
+      'MBA',
+      'MBA with specialization in Business Analytics',
+      'MBA with specialization in Finance',
+      'MBA with specialization in Human Resource',
+      'MBA with specialization in Marketing',
+      'MBA with specialization in Digital Marketing',
+      'MBA with specialization in Logistics and Supply Chain Management',
+      'MBA with specialization in Banking & Finance',
+      'MBA with Aviation Management',
+      'MBA with specialization in Sports Management',
+      'MBA with specialization in Branding & Advertising'
+    ],
+    courses2025: ['MASTER OF BUSINESS ADMINISTRATION']
+  },
+  {
+    label: 'MBA AI & DS',
+    courses2026: ['MBA AI & DS'],
+    courses2025: ['Master of Business Administration Artificial Intelligence and Data Science']
+  },
+  {
+    label: 'MBA IMPACT',
+    courses2026: ['MBA IMPACT'],
+    courses2025: ['MBA IMPACT']
+  },
+  {
+    label: 'MBA in Hospital Administration',
+    courses2026: ['MBA in Hospital Administration'],
+    courses2025: ['MASTER OF BUSINESS ADMINISTRATION IN HOSPITAL ADMINISTRATION']
+  },
+  {
+    label: 'MCA',
+    courses2026: ['MCA'],
+    courses2025: ['MCA']
+  },
+  {
+    label: 'MCA Ai&DS',
+    courses2026: ['MCA AI & DS'],
+    courses2025: ['MCA Artificial Intelligence & Data Science']
+  },
+  {
+    label: 'BMLT',
+    courses2026: ['BMLT'],
+    courses2025: ['Bachelor of Medical Laboratory Technology']
+  },
+  {
+    label: 'BMRIT',
+    courses2026: ['BMRIT'],
+    courses2025: ['Bachelor in Medical Radio Imaging Technology (BMRIT)']
+  },
+  {
+    label: 'BPT',
+    courses2026: ['BPT'],
+    courses2025: ['BACEHLORS IN PHYSIOTHERAPY']
+  },
+  {
+    label: 'B.Sc. NURSING',
+    courses2026: ['B.Sc Nursing'],
+    courses2025: ['B.Sc. NURSING']
+  },
+  {
+    label: 'BBA',
+    matcher: course => /\bbba\b/i.test(course)
+  },
+  {
+    label: 'BCA',
+    matcher: course => /\bbca\b/i.test(course)
+  }
+];
+
+const comparisonOnly2026Groups = [
+  'B.Tech CSE (AI & ML)',
+  'B.Tech CSE (AI & ML Through RLQ)',
+  'B.Tech CSE IOT',
+  'B.Tech CSE (Hons.) with specialization in Generative AI',
+  'B.Tech CSE (Cybersecurity and AI & ML)',
+  'B.Tech CSE (IOT with AI & ML)'
+].map(course => ({ label: course, courses2026: [course], courses2025: [] }));
+
+function normalizeComparisonCourse(value) {
+  return String(value || '').trim().toLowerCase().replace(/\./g, '').replace(/\s+/g, ' ');
+}
+
+function countComparisonGroup(countsByCourse, group, year) {
+  if (typeof group.matcher === 'function') {
+    return [...countsByCourse.entries()].reduce((sum, [course, count]) => (
+      group.matcher(course) ? sum + count : sum
+    ), 0);
+  }
+  const wanted = new Set((group[`courses${year}`] || []).map(normalizeComparisonCourse));
+  return [...countsByCourse.entries()].reduce((sum, [course, count]) => (
+    wanted.has(normalizeComparisonCourse(course)) ? sum + count : sum
+  ), 0);
+}
+
+async function getComparisonCountsByCourse({ start, end, campus }) {
+  const match = { admissionDateParsed: { $gte: start, $lte: end } };
+  if (campus !== 'ALL') addAndFilter(match, campusFilterQuery(campus, ['admittedCenter', 'campus']));
+  const grouped = await Student.aggregate([
+    { $match: match },
+    { $group: { _id: '$courseName', count: { $sum: 1 } } }
+  ]);
+  const counts = new Map();
+  grouped.forEach(item => {
+    const course = String(item._id || '').trim();
+    if (course) counts.set(course, (counts.get(course) || 0) + item.count);
+  });
+  return counts;
+}
+
+async function getNewComparisonReportData({ startDate, endDate, campus }) {
+  const start2026 = parseISODateParam(startDate);
+  const end2026 = parseISODateParam(endDate, true);
+  const allowedCampuses = ['ALL', 'GEU', 'GEHU', 'GEHUDDN', 'GEHUHLD', 'GEHUBTL'];
+  if (!start2026 || !end2026 || end2026 < start2026) {
+    const err = new Error('Select a valid 2026 start date and end date.');
+    err.statusCode = 400;
+    throw err;
+  }
+  if (start2026.getUTCFullYear() !== 2026 || end2026.getUTCFullYear() !== 2026) {
+    const err = new Error('This report compares 2026 with 2025, so both selected dates must be in 2026.');
+    err.statusCode = 400;
+    throw err;
+  }
+  if (!allowedCampuses.includes(campus)) {
+    const err = new Error('Select a valid campus.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const start2025 = new Date(Date.UTC(2025, start2026.getUTCMonth(), start2026.getUTCDate()));
+  const end2025 = new Date(Date.UTC(2025, end2026.getUTCMonth(), end2026.getUTCDate(), 23, 59, 59, 999));
+  const [counts2026, counts2025] = await Promise.all([
+    getComparisonCountsByCourse({ start: start2026, end: end2026, campus }),
+    getComparisonCountsByCourse({ start: start2025, end: end2025, campus })
+  ]);
+
+  const rows = comparisonCourseGroups.map(group => ({
+    course: group.label,
+    count2026: countComparisonGroup(counts2026, group, 2026),
+    count2025: countComparisonGroup(counts2025, group, 2025),
+    section: 'main'
+  }));
+  const only2026Rows = comparisonOnly2026Groups.map(group => ({
+    course: group.label,
+    count2026: countComparisonGroup(counts2026, group, 2026),
+    count2025: 0,
+    section: 'only2026'
+  }));
+
+  const total2026 = rows.reduce((sum, row) => sum + row.count2026, 0);
+  const total2025 = rows.reduce((sum, row) => sum + row.count2025, 0);
+  const only2026Total = only2026Rows.reduce((sum, row) => sum + row.count2026, 0);
+
+  return {
+    title: 'Comparison chart 2025 vs 2026',
+    startDate,
+    endDate,
+    comparisonStartDate: start2025.toISOString().slice(0, 10),
+    comparisonEndDate: end2025.toISOString().slice(0, 10),
+    campus,
+    campusLabel: courseReportCampusLabel(campus),
+    rows,
+    only2026Rows,
+    total2026,
+    total2025,
+    only2026Total
+  };
+}
+
 function createCourseReportTransporter() {
   if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) {
     return {
@@ -2438,6 +2636,18 @@ app.get('/api/admin/course-admission-report.pdf', auth, adminOnly, async (req, r
   } catch (err) {
     console.error('Course admission PDF report error:', err);
     res.status(err.statusCode || 500).json({ error: 'Could not create course admission report: ' + err.message });
+  }
+});
+
+app.get('/api/admin/new-report', auth, adminOnly, async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const campus = String(req.query.campus || 'ALL').toUpperCase();
+    const data = await getNewComparisonReportData({ startDate, endDate, campus });
+    res.json(data);
+  } catch (err) {
+    console.error('New comparison report error:', err);
+    res.status(err.statusCode || 500).json({ error: 'Could not create new report: ' + err.message });
   }
 });
 

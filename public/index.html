@@ -404,6 +404,18 @@ tbody tr{transition:background .1s;}
 .compare-summary-table tr:hover{background:var(--accent-subtle);}
 .compare-summary-table .metric-col{text-align:left;font-weight:700;color:var(--text);}
 .compare-summary-table tr.total-summary-row{background:linear-gradient(135deg,#f0f9ff,#eff6ff);font-weight:800;}
+
+.new-report-panel{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:white;}
+.new-report-title{text-align:center;font-size:22px;font-weight:700;padding:10px 12px;border-bottom:2px solid #111;color:#111;}
+.new-report-meta{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:10px 14px;background:#f8fafc;border-bottom:1px solid var(--border);font-size:12px;font-weight:600;color:var(--text-secondary);}
+.new-report-table{width:100%;border-collapse:collapse;font-size:18px;color:#111;}
+.new-report-table th,.new-report-table td{border:2px solid #111;padding:6px 12px;text-align:center;white-space:normal;color:#111;}
+.new-report-table th{background:white;font-size:20px;font-weight:800;text-transform:none;letter-spacing:0;}
+.new-report-table .course-col{width:65%;font-weight:600;}
+.new-report-table .count-col{width:17.5%;font-weight:600;}
+.new-report-table .section-break td{height:20px;background:#f8fafc;}
+.new-report-table .section-label td{background:#e2e8f0;font-size:14px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;color:#334155;}
+.new-report-table .total-row td{background:#f1f5f9;font-weight:800;}
 </style>
 </head>
 <body>
@@ -615,6 +627,34 @@ tbody tr{transition:background .1s;}
           <button class="btn-purple btn-sm" id="sendCourseReportBtn" onclick="openCourseReportEmailModal()">📧 Send Report</button>
         </div>
         <div id="courseReportStatus" class="upload-status" style="margin-top:10px;"></div>
+      </div>
+    </div>
+
+    <div class="section-card admin-only" id="newComparisonReport" style="display:none;">
+      <div class="section-header">
+        <div class="section-title"><span class="icon" style="background:var(--accent-light);color:var(--accent);">📊</span>New Report</div>
+      </div>
+      <div class="section-body">
+        <p style="color:var(--text-muted);font-size:12px;margin-bottom:14px;">Compare mapped course admissions for 2026 against the same date range in 2025.</p>
+        <div class="upload-group">
+          <label>2026 Start Date</label>
+          <input type="date" id="newReportStartDate">
+          <label>2026 End Date</label>
+          <input type="date" id="newReportEndDate">
+          <label>Campus</label>
+          <select id="newReportCampus">
+            <option value="ALL">All Campuses</option>
+            <option value="GEU">GEU</option>
+            <option value="GEHU">GEHU - All Campuses</option>
+            <option value="GEHUDDN">GEHU - Dehradun</option>
+            <option value="GEHUHLD">GEHU - Haldwani</option>
+            <option value="GEHUBTL">GEHU - Bhimtal</option>
+          </select>
+          <button class="btn-outline btn-sm" id="newReportPreviewBtn" onclick="previewNewReport()">👀 Preview</button>
+          <button class="btn-purple btn-sm" id="newReportDownloadBtn" onclick="downloadNewReportExcel()">⬇ Download Excel</button>
+        </div>
+        <div id="newReportStatus" class="upload-status" style="margin-top:10px;"></div>
+        <div id="newReportPreviewWrap" style="display:none;margin-top:14px;"></div>
       </div>
     </div>
   </div>
@@ -1212,6 +1252,7 @@ function switchView(view){
     document.getElementById('viewAdmin').classList.remove('hidden');
     document.getElementById('navAdmin').classList.add('active');
     initAdminAccordions();
+    setNewReportDefaultDates();
   }
   else if(view==='compare'){
     document.getElementById('viewCompare').classList.remove('hidden');
@@ -1487,6 +1528,110 @@ async function sendCourseAdmissionReportEmail(){
     showCourseReportEmailStatus('Course admission PDF sent successfully.','success');
   }catch(e){ showCourseReportEmailStatus(e.message,'error'); }
   finally{ btn.disabled=false; }
+}
+
+let newReportData=null;
+
+function setNewReportDefaultDates(){
+  const startEl=document.getElementById('newReportStartDate');
+  const endEl=document.getElementById('newReportEndDate');
+  if(!startEl||!endEl) return;
+  if(!startEl.value) startEl.value='2026-01-01';
+  if(!endEl.value) endEl.value='2026-12-31';
+}
+
+function getNewReportParams(){
+  setNewReportDefaultDates();
+  const startDate=document.getElementById('newReportStartDate').value;
+  const endDate=document.getElementById('newReportEndDate').value;
+  const campus=document.getElementById('newReportCampus').value||'ALL';
+  if(!startDate||!endDate){ alert('Please select both 2026 start date and 2026 end date.'); return null; }
+  if(!startDate.startsWith('2026-')||!endDate.startsWith('2026-')){ alert('Both dates must be in 2026 for this report.'); return null; }
+  if(endDate<startDate){ alert('End date must be on or after the start date.'); return null; }
+  return { startDate, endDate, campus };
+}
+
+function renderNewReportTable(data){
+  const rows=data.rows||[];
+  const onlyRows=data.only2026Rows||[];
+  let html='<div class="new-report-panel">';
+  html+='<div class="new-report-title">'+escapeHtml(data.title||'Comparison chart 2025 vs 2026')+'</div>';
+  html+='<div class="new-report-meta"><span>2026: '+escapeHtml(data.startDate)+' to '+escapeHtml(data.endDate)+'</span><span>2025: '+escapeHtml(data.comparisonStartDate)+' to '+escapeHtml(data.comparisonEndDate)+'</span><span>'+escapeHtml(data.campusLabel||'All Campuses')+'</span></div>';
+  html+='<table class="new-report-table"><thead><tr><th>Course</th><th>2026</th><th>2025</th></tr></thead><tbody>';
+  rows.forEach(row=>{
+    html+='<tr><td class="course-col">'+escapeHtml(row.course)+'</td><td class="count-col">'+Number(row.count2026||0)+'</td><td class="count-col">'+Number(row.count2025||0)+'</td></tr>';
+  });
+  html+='<tr class="total-row"><td>Total</td><td>'+Number(data.total2026||0)+'</td><td>'+Number(data.total2025||0)+'</td></tr>';
+  html+='<tr class="section-break"><td></td><td></td><td></td></tr>';
+  html+='<tr class="section-label"><td colspan="3">Only present in 2026</td></tr>';
+  onlyRows.forEach(row=>{
+    html+='<tr><td class="course-col">'+escapeHtml(row.course)+'</td><td class="count-col">'+Number(row.count2026||0)+'</td><td class="count-col">0</td></tr>';
+  });
+  html+='<tr class="total-row"><td>Only 2026 Total</td><td>'+Number(data.only2026Total||0)+'</td><td>0</td></tr>';
+  html+='</tbody></table></div>';
+  document.getElementById('newReportPreviewWrap').innerHTML=html;
+  document.getElementById('newReportPreviewWrap').style.display='block';
+}
+
+async function fetchNewReportData(){
+  const p=getNewReportParams();
+  if(!p) return null;
+  const status=document.getElementById('newReportStatus');
+  status.textContent='Loading new report...';
+  status.style.color='var(--text-muted)';
+  const r=await authFetch('/api/admin/new-report?'+new URLSearchParams(p).toString());
+  const d=await r.json();
+  if(!r.ok) throw new Error(d.error||'Could not load new report');
+  newReportData=d;
+  status.textContent='✓ New report ready.';
+  status.style.color='var(--success-dark)';
+  return d;
+}
+
+async function previewNewReport(){
+  const btn=document.getElementById('newReportPreviewBtn');
+  btn.disabled=true;
+  try{
+    const data=await fetchNewReportData();
+    if(data) renderNewReportTable(data);
+  }catch(e){
+    const status=document.getElementById('newReportStatus');
+    status.textContent='✕ '+e.message;
+    status.style.color='var(--danger)';
+  }finally{ btn.disabled=false; }
+}
+
+async function downloadNewReportExcel(){
+  const btn=document.getElementById('newReportDownloadBtn');
+  btn.disabled=true;
+  try{
+    const data=await fetchNewReportData();
+    if(!data) return;
+    renderNewReportTable(data);
+    const rows=[
+      [data.title||'Comparison chart 2025 vs 2026'],
+      ['2026', data.startDate+' to '+data.endDate, '2025', data.comparisonStartDate+' to '+data.comparisonEndDate],
+      ['Campus', data.campusLabel||'All Campuses'],
+      [],
+      ['Course','2026','2025'],
+      ...(data.rows||[]).map(row=>[row.course, Number(row.count2026||0), Number(row.count2025||0)]),
+      ['Total', Number(data.total2026||0), Number(data.total2025||0)],
+      [],
+      ['Only present in 2026'],
+      ['Course','2026','2025'],
+      ...(data.only2026Rows||[]).map(row=>[row.course, Number(row.count2026||0), 0]),
+      ['Only 2026 Total', Number(data.only2026Total||0), 0]
+    ];
+    const wb=XLSX.utils.book_new();
+    const ws=XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols']=[{wch:58},{wch:12},{wch:12},{wch:12}];
+    XLSX.utils.book_append_sheet(wb,ws,'New Report');
+    XLSX.writeFile(wb,'GEU_New_Report_2025_vs_2026_'+data.startDate+'_to_'+data.endDate+'.xlsx');
+  }catch(e){
+    const status=document.getElementById('newReportStatus');
+    status.textContent='✕ '+e.message;
+    status.style.color='var(--danger)';
+  }finally{ btn.disabled=false; }
 }
 
 async function uploadCSV(){
