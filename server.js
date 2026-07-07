@@ -2534,16 +2534,16 @@ async function getComparisonCountsByCourse({ start, end, campus }) {
 }
 
 async function getNewComparisonReportData({ startDate, endDate, campus }) {
-  const start2026 = parseISODateParam(startDate);
-  const end2026 = parseISODateParam(endDate, true);
+  const start2025 = parseISODateParam(startDate);
+  const end2025 = parseISODateParam(endDate, true);
   const allowedCampuses = ['ALL', 'GEU', 'GEHU', 'GEHUDDN', 'GEHUHLD', 'GEHUBTL'];
-  if (!start2026 || !end2026 || end2026 < start2026) {
-    const err = new Error('Select a valid 2026 start date and end date.');
+  if (!start2025 || !end2025 || end2025 < start2025) {
+    const err = new Error('Select a valid 2025 start date and end date.');
     err.statusCode = 400;
     throw err;
   }
-  if (start2026.getUTCFullYear() !== 2026 || end2026.getUTCFullYear() !== 2026) {
-    const err = new Error('This report compares 2026 with 2025, so both selected dates must be in 2026.');
+  if (start2025.getUTCFullYear() !== 2025 || end2025.getUTCFullYear() !== 2025) {
+    const err = new Error('The database date range must be in 2025.');
     err.statusCode = 400;
     throw err;
   }
@@ -2553,43 +2553,36 @@ async function getNewComparisonReportData({ startDate, endDate, campus }) {
     throw err;
   }
 
-  const start2025 = new Date(Date.UTC(2025, start2026.getUTCMonth(), start2026.getUTCDate()));
-  const end2025 = new Date(Date.UTC(2025, end2026.getUTCMonth(), end2026.getUTCDate(), 23, 59, 59, 999));
-  const [counts2026, counts2025] = await Promise.all([
-    getComparisonCountsByCourse({ start: start2026, end: end2026, campus }),
-    getComparisonCountsByCourse({ start: start2025, end: end2025, campus })
-  ]);
+  const counts2025 = await getComparisonCountsByCourse({ start: start2025, end: end2025, campus });
 
   const rows = comparisonCourseGroups.map(group => ({
     course: group.label,
-    count2026: countComparisonGroup(counts2026, group, 2026),
+    count2026: 0,
     count2025: countComparisonGroup(counts2025, group, 2025),
     section: 'main'
   }));
   const only2026Rows = comparisonOnly2026Groups.map(group => ({
     course: group.label,
-    count2026: countComparisonGroup(counts2026, group, 2026),
+    count2026: 0,
     count2025: 0,
     section: 'only2026'
   }));
 
-  const total2026 = rows.reduce((sum, row) => sum + row.count2026, 0);
   const total2025 = rows.reduce((sum, row) => sum + row.count2025, 0);
-  const only2026Total = only2026Rows.reduce((sum, row) => sum + row.count2026, 0);
 
   return {
     title: 'Comparison chart 2025 vs 2026',
-    startDate,
-    endDate,
-    comparisonStartDate: start2025.toISOString().slice(0, 10),
-    comparisonEndDate: end2025.toISOString().slice(0, 10),
+    uploadedYear: 2026,
+    comparisonYear: 2025,
+    comparisonStartDate: startDate,
+    comparisonEndDate: endDate,
     campus,
     campusLabel: courseReportCampusLabel(campus),
     rows,
     only2026Rows,
-    total2026,
+    total2026: 0,
     total2025,
-    only2026Total
+    only2026Total: 0
   };
 }
 

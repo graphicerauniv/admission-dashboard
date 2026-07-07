@@ -635,11 +635,13 @@ tbody tr{transition:background .1s;}
         <div class="section-title"><span class="icon" style="background:var(--accent-light);color:var(--accent);">📊</span>New Report</div>
       </div>
       <div class="section-body">
-        <p style="color:var(--text-muted);font-size:12px;margin-bottom:14px;">Compare mapped course admissions for 2026 against the same date range in 2025.</p>
+        <p style="color:var(--text-muted);font-size:12px;margin-bottom:14px;">Upload the 2026 Excel/CSV report, then select the 2025 admission-date range for comparison.</p>
         <div class="upload-group">
-          <label>2026 Start Date</label>
+          <label>2026 Excel/CSV</label>
+          <input type="file" id="newReport2026File" accept=".xlsx,.xls,.csv">
+          <label>2025 Start Date</label>
           <input type="date" id="newReportStartDate">
-          <label>2026 End Date</label>
+          <label>2025 End Date</label>
           <input type="date" id="newReportEndDate">
           <label>Campus</label>
           <select id="newReportCampus">
@@ -1532,12 +1534,41 @@ async function sendCourseAdmissionReportEmail(){
 
 let newReportData=null;
 
+const newReportCourseGroups=[
+  {label:'B.Tech CSE',courses2026:['B.Tech CSE']},
+  {label:'B.Tech CSE AI & ML',courses2026:['B.Tech CSE (Hons.) with specialization in AI & ML','B.Tech CSE AI & ML']},
+  {label:'B.Tech CSE AI & DS',courses2026:['B.Tech CSE (Hons.) with specialization in AI & DS','B.Tech CSE AI & DS']},
+  {label:'B.Tech CSE Regional Language Quota',courses2026:['B.Tech CSE Regional Language Quota']},
+  {label:'B.Tech CSE Cyber Security',courses2026:['B.Tech CSE (Hons.) with specialization in Cyber Security','B.Tech CSE Cyber Security']},
+  {label:'MBA',courses2026:['MBA','MBA with specialization in Business Analytics','MBA with specialization in Finance','MBA with specialization in Human Resource','MBA with specialization in Marketing','MBA with specialization in Digital Marketing','MBA with specialization in Logistics and Supply Chain Management','MBA with specialization in Banking & Finance','MBA with Aviation Management','MBA with specialization in Sports Management','MBA with specialization in Branding & Advertising']},
+  {label:'MBA AI & DS',courses2026:['MBA AI & DS']},
+  {label:'MBA IMPACT',courses2026:['MBA IMPACT']},
+  {label:'MBA in Hospital Administration',courses2026:['MBA in Hospital Administration']},
+  {label:'MCA',courses2026:['MCA']},
+  {label:'MCA Ai&DS',courses2026:['MCA AI & DS']},
+  {label:'BMLT',courses2026:['BMLT']},
+  {label:'BMRIT',courses2026:['BMRIT']},
+  {label:'BPT',courses2026:['BPT']},
+  {label:'B.Sc. NURSING',courses2026:['B.Sc Nursing']},
+  {label:'BBA',matcher:course=>/\bbba\b/i.test(course)},
+  {label:'BCA',matcher:course=>/\bbca\b/i.test(course)}
+];
+
+const newReportOnly2026Groups=[
+  'B.Tech CSE (AI & ML)',
+  'B.Tech CSE (AI & ML Through RLQ)',
+  'B.Tech CSE IOT',
+  'B.Tech CSE (Hons.) with specialization in Generative AI',
+  'B.Tech CSE (Cybersecurity and AI & ML)',
+  'B.Tech CSE (IOT with AI & ML)'
+].map(course=>({label:course,courses2026:[course]}));
+
 function setNewReportDefaultDates(){
   const startEl=document.getElementById('newReportStartDate');
   const endEl=document.getElementById('newReportEndDate');
   if(!startEl||!endEl) return;
-  if(!startEl.value) startEl.value='2026-01-01';
-  if(!endEl.value) endEl.value='2026-12-31';
+  if(!startEl.value) startEl.value='2025-01-01';
+  if(!endEl.value) endEl.value='2025-12-31';
 }
 
 function getNewReportParams(){
@@ -1545,10 +1576,82 @@ function getNewReportParams(){
   const startDate=document.getElementById('newReportStartDate').value;
   const endDate=document.getElementById('newReportEndDate').value;
   const campus=document.getElementById('newReportCampus').value||'ALL';
-  if(!startDate||!endDate){ alert('Please select both 2026 start date and 2026 end date.'); return null; }
-  if(!startDate.startsWith('2026-')||!endDate.startsWith('2026-')){ alert('Both dates must be in 2026 for this report.'); return null; }
+  const file=document.getElementById('newReport2026File').files[0];
+  if(!file){ alert('Please upload the 2026 Excel/CSV report.'); return null; }
+  if(!startDate||!endDate){ alert('Please select both 2025 start date and 2025 end date.'); return null; }
+  if(!startDate.startsWith('2025-')||!endDate.startsWith('2025-')){ alert('Both database dates must be in 2025 for this report.'); return null; }
   if(endDate<startDate){ alert('End date must be on or after the start date.'); return null; }
-  return { startDate, endDate, campus };
+  return { startDate, endDate, campus, file };
+}
+
+function normalizeNewReportCourse(value){
+  return String(value||'').trim().toLowerCase().replace(/\./g,'').replace(/\s+/g,' ');
+}
+
+function countNewReportGroup(countsByCourse,group){
+  if(typeof group.matcher==='function'){
+    return [...countsByCourse.entries()].reduce((sum,[course,count])=>group.matcher(course)?sum+count:sum,0);
+  }
+  const wanted=new Set((group.courses2026||[]).map(normalizeNewReportCourse));
+  return [...countsByCourse.entries()].reduce((sum,[course,count])=>wanted.has(normalizeNewReportCourse(course))?sum+count:sum,0);
+}
+
+function findNewReportCourseColumn(rows){
+  const first=rows.find(row=>row&&Object.keys(row).length);
+  if(!first) return '';
+  const headers=Object.keys(first);
+  const preferred=['course name','coursename','course','program name','programname','program','course_name','program_name'];
+  return headers.find(header=>preferred.includes(String(header).trim().toLowerCase().replace(/\s+/g,' ')))
+    || headers.find(header=>/course|program/i.test(header))
+    || '';
+}
+
+function findNewReportCountColumn(rows){
+  const first=rows.find(row=>row&&Object.keys(row).length);
+  if(!first) return '';
+  const headers=Object.keys(first);
+  const preferred=['count','counts','total','admissions','admission count','admissioncount'];
+  return headers.find(header=>preferred.includes(String(header).trim().toLowerCase().replace(/\s+/g,' ')))
+    || headers.find(header=>/count|total|admission/i.test(header))
+    || '';
+}
+
+function parseNewReportCount(value){
+  if(typeof value==='number'&&Number.isFinite(value)) return value;
+  const cleaned=String(value||'').replace(/,/g,'').trim();
+  const parsed=Number(cleaned);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+async function getUploaded2026Counts(file){
+  const workbook=await readAsWorkbook(file);
+  const sheet=workbook.Sheets[workbook.SheetNames[0]];
+  const rows=XLSX.utils.sheet_to_json(sheet,{defval:''});
+  const courseColumn=findNewReportCourseColumn(rows);
+  if(!courseColumn) throw new Error('Could not find a course column in the 2026 file. Use a column like Course Name, Course, Program, or Program Name.');
+  const countColumn=findNewReportCountColumn(rows);
+  const counts=new Map();
+  rows.forEach(row=>{
+    const course=String(row[courseColumn]||'').trim();
+    if(course) counts.set(course,(counts.get(course)||0)+(countColumn?parseNewReportCount(row[countColumn]):1));
+  });
+  const mainCounts=new Map(newReportCourseGroups.map(group=>[group.label,countNewReportGroup(counts,group)]));
+  const onlyCounts=new Map(newReportOnly2026Groups.map(group=>[group.label,countNewReportGroup(counts,group)]));
+  return { mainCounts, onlyCounts, sourceRows: rows.length, courseColumn, countColumn };
+}
+
+function mergeUploaded2026Counts(data,uploaded){
+  const rows=(data.rows||[]).map(row=>({
+    ...row,
+    count2026: uploaded.mainCounts.get(row.course)||0
+  }));
+  const only2026Rows=(data.only2026Rows||[]).map(row=>({
+    ...row,
+    count2026: uploaded.onlyCounts.get(row.course)||0
+  }));
+  const total2026=rows.reduce((sum,row)=>sum+Number(row.count2026||0),0);
+  const only2026Total=only2026Rows.reduce((sum,row)=>sum+Number(row.count2026||0),0);
+  return { ...data, rows, only2026Rows, total2026, only2026Total, uploadedRows: uploaded.sourceRows, uploadedCourseColumn: uploaded.courseColumn };
 }
 
 function renderNewReportTable(data){
@@ -1556,7 +1659,7 @@ function renderNewReportTable(data){
   const onlyRows=data.only2026Rows||[];
   let html='<div class="new-report-panel">';
   html+='<div class="new-report-title">'+escapeHtml(data.title||'Comparison chart 2025 vs 2026')+'</div>';
-  html+='<div class="new-report-meta"><span>2026: '+escapeHtml(data.startDate)+' to '+escapeHtml(data.endDate)+'</span><span>2025: '+escapeHtml(data.comparisonStartDate)+' to '+escapeHtml(data.comparisonEndDate)+'</span><span>'+escapeHtml(data.campusLabel||'All Campuses')+'</span></div>';
+  html+='<div class="new-report-meta"><span>2026: uploaded file</span><span>2025: '+escapeHtml(data.comparisonStartDate)+' to '+escapeHtml(data.comparisonEndDate)+'</span><span>'+escapeHtml(data.campusLabel||'All Campuses')+'</span></div>';
   html+='<table class="new-report-table"><thead><tr><th>Course</th><th>2026</th><th>2025</th></tr></thead><tbody>';
   rows.forEach(row=>{
     html+='<tr><td class="course-col">'+escapeHtml(row.course)+'</td><td class="count-col">'+Number(row.count2026||0)+'</td><td class="count-col">'+Number(row.count2025||0)+'</td></tr>';
@@ -1577,15 +1680,17 @@ async function fetchNewReportData(){
   const p=getNewReportParams();
   if(!p) return null;
   const status=document.getElementById('newReportStatus');
-  status.textContent='Loading new report...';
+  status.textContent='Reading 2026 file and loading 2025 data...';
   status.style.color='var(--text-muted)';
-  const r=await authFetch('/api/admin/new-report?'+new URLSearchParams(p).toString());
+  const uploaded=await getUploaded2026Counts(p.file);
+  const params=new URLSearchParams({startDate:p.startDate,endDate:p.endDate,campus:p.campus});
+  const r=await authFetch('/api/admin/new-report?'+params.toString());
   const d=await r.json();
   if(!r.ok) throw new Error(d.error||'Could not load new report');
-  newReportData=d;
-  status.textContent='✓ New report ready.';
+  newReportData=mergeUploaded2026Counts(d,uploaded);
+  status.textContent='✓ New report ready. 2026 rows read: '+uploaded.sourceRows+' | Course column: '+uploaded.courseColumn+(uploaded.countColumn?' | Count column: '+uploaded.countColumn:' | Count column: row count');
   status.style.color='var(--success-dark)';
-  return d;
+  return newReportData;
 }
 
 async function previewNewReport(){
@@ -1610,7 +1715,7 @@ async function downloadNewReportExcel(){
     renderNewReportTable(data);
     const rows=[
       [data.title||'Comparison chart 2025 vs 2026'],
-      ['2026', data.startDate+' to '+data.endDate, '2025', data.comparisonStartDate+' to '+data.comparisonEndDate],
+      ['2026', 'Uploaded file', '2025', data.comparisonStartDate+' to '+data.comparisonEndDate],
       ['Campus', data.campusLabel||'All Campuses'],
       [],
       ['Course','2026','2025'],
