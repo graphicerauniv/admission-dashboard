@@ -1649,6 +1649,7 @@ const emailSettingsSchema = new mongoose.Schema({
   courseReportToEmails: [{ type: String, trim: true, lowercase: true }],
   courseReportCcEmails: [{ type: String, trim: true, lowercase: true }],
   mode: { type: String, enum: ['regular', 'online'], default: 'regular' },
+  withdrawalCount: { type: Number, default: 0 },
   campuses: [{ type: String, trim: true }],
   years: [{ type: Number }],
   updatedAt: { type: Date, default: Date.now }
@@ -1676,7 +1677,7 @@ function createTransporter() {
 app.get('/api/email-settings', auth, adminOnly, async (req, res) => {
   try {
     const s = await EmailSettings.findOne({ key: 'report_settings' }).lean();
-    res.json(s || { toEmails: [], ccEmails: [], mode: 'regular', campuses: ['GEU', 'GEHU'], years: [2026, 2025, 2024] });
+    res.json(s || { toEmails: [], ccEmails: [], mode: 'regular', withdrawalCount: 0, campuses: ['GEU', 'GEHU'], years: [2026, 2025, 2024] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -1684,9 +1685,10 @@ app.get('/api/email-settings', auth, adminOnly, async (req, res) => {
 app.post('/api/email-settings', auth, adminOnly, async (req, res) => {
   try {
     const { toEmails, ccEmails, campuses, years, mode } = req.body;
+    const withdrawalCount = Math.max(0, parseInt(req.body?.withdrawalCount, 10) || 0);
     await EmailSettings.findOneAndUpdate(
       { key: 'report_settings' },
-      { toEmails: toEmails || [], ccEmails: ccEmails || [], mode: normalizeMode(mode), campuses: campuses || [], years: years || [], updatedAt: new Date() },
+      { toEmails: toEmails || [], ccEmails: ccEmails || [], mode: normalizeMode(mode), withdrawalCount, campuses: campuses || [], years: years || [], updatedAt: new Date() },
       { upsert: true, new: true }
     );
     res.json({ success: true });
@@ -1759,6 +1761,7 @@ async function buildReport(years, campuses, mode) {
         admissionDateParsed: { $gte: start, $lte: end },
         ...(andParts.length ? { $and: andParts } : {})
       };
+      exclude2026WithdrawnAdmissions(admFilter, 'admissionDateParsed', start, end);
 
       const [reg, adm] = await Promise.all([
         Student.countDocuments(regFilter),
@@ -1771,10 +1774,11 @@ async function buildReport(years, campuses, mode) {
 }
 
 // ─── Helper: build HTML email ───
-function buildEmailHTML(years, campuses, results) {
+function buildEmailHTML(years, campuses, results, options = {}) {
   const today = new Date();
   const dateStr = today.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' });
   const primaryYear = years.includes(2026) ? 2026 : years[0];
+  const withdrawalCount = Math.max(0, parseInt(options.withdrawalCount, 10) || 0);
 
   const campusLabel = c => ({
     'GEU': 'GEU', 'GEHU': 'GEHU', 'GEHUDDN': 'GEHU-DDN',
@@ -1801,6 +1805,7 @@ function buildEmailHTML(years, campuses, results) {
   if (showCombinedTotal) {
     headerRow1 += `<th colspan="${years.length}" style="padding:18px 16px;background:${topHeaderBg};color:#000000;font-size:18px;font-weight:800;text-align:center;border:1px solid #a8a8a8;letter-spacing:0.2px;">Total GEU & GEHU</th>`;
   }
+  headerRow1 += `<th rowspan="2" style="padding:18px 16px;background:#fee2e2;color:#7f1d1d;font-size:18px;font-weight:800;text-align:center;border:1px solid #a8a8a8;letter-spacing:0.2px;">Withdrawal</th>`;
 
   let headerRow2 = `<th style="padding:14px 16px;background:#f7efc9;color:#000000;font-size:14px;font-weight:700;border:1px solid #a8a8a8;"></th>`;
   showCampuses.forEach(() => {
@@ -1835,6 +1840,8 @@ function buildEmailHTML(years, campuses, results) {
         tds += `<td style="padding:20px 10px;text-align:center;font-size:18px;font-weight:800;color:#000000;background:#d8d6f1;border:1px solid #a8a8a8;">${combinedTotal > 0 ? combinedTotal : '-'}</td>`;
       });
     }
+    const withdrawalCell = row.type === 'adm' ? withdrawalCount : '-';
+    tds += `<td style="padding:20px 12px;text-align:center;font-size:18px;font-weight:800;color:#991b1b;background:#fee2e2;border:1px solid #a8a8a8;">${withdrawalCell}</td>`;
 
     dataRows += `<tr>${tds}</tr>`;
   });
@@ -1924,9 +1931,10 @@ app.get('/api/report-preview', auth, dashboardOnly, async (req, res) => {
 
     const years = yearsParam.split(',').map(Number).sort((a, b) => b - a);
     const campuses = campusParam.split(',').map(s => s.trim()).filter(Boolean);
+    const withdrawalCount = Math.max(0, parseInt(req.query.withdrawalCount, 10) || 0);
 
     const results = await buildReport(years, campuses, mode);
-    const html = buildEmailHTML(years, campuses, results);
+    const html = buildEmailHTML(years, campuses, results, { withdrawalCount });
     res.json({ html });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1951,8 +1959,9 @@ app.post('/api/send-report', auth, adminOnly, async (req, res) => {
 
     const sortedYears = [...years].map(Number).sort((a, b) => b - a);
     const reportMode = mode ? normalizeMode(mode) : (settings?.mode ? normalizeMode(settings.mode) : 'regular');
+    const withdrawalCount = Math.max(0, parseInt(req.body?.withdrawalCount ?? settings?.withdrawalCount, 10) || 0);
     const results = await buildReport(sortedYears, campuses, reportMode);
-    const html = buildEmailHTML(sortedYears, campuses, results);
+    const html = buildEmailHTML(sortedYears, campuses, results, { withdrawalCount });
 
     const today = new Date();
     const dateStr = today.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' });
@@ -2061,6 +2070,32 @@ function addAndFilter(query, filter) {
   if (!filter || Object.keys(filter).length === 0) return query;
   query.$and = query.$and || [];
   query.$and.push(filter);
+  return query;
+}
+
+function nonWithdrawnStatusQuery() {
+  return {
+    $or: [
+      { applicationStatus: { $exists: false } },
+      { applicationStatus: null },
+      { applicationStatus: '' },
+      { applicationStatus: { $not: /withdr/i } }
+    ]
+  };
+}
+
+function exclude2026WithdrawnAdmissions(query, dateField, start, end) {
+  if (dateField !== 'admissionDateParsed' || !start || !end) return query;
+  const start2026 = new Date(Date.UTC(2026, 0, 1));
+  const start2027 = new Date(Date.UTC(2027, 0, 1));
+  if (end < start2026 || start >= start2027) return query;
+  addAndFilter(query, {
+    $or: [
+      { admissionDateParsed: { $lt: start2026 } },
+      { admissionDateParsed: { $gte: start2027 } },
+      nonWithdrawnStatusQuery()
+    ]
+  });
   return query;
 }
 
@@ -2186,6 +2221,7 @@ function modeCourseQuery(mode) {
 
 function buildDateFilter(dateField, start, end, extra) {
   const q = { [dateField]: { $gte: start, $lte: end } };
+  exclude2026WithdrawnAdmissions(q, dateField, start, end);
   if (extra.campus) {
     addAndFilter(q, campusFilterQuery(extra.campus));
   }
@@ -2219,6 +2255,149 @@ function parseISODateParam(value, endOfDay = false) {
   if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
   return date;
 }
+
+function normalizeMobileNumber(value) {
+  return String(value || '').replace(/\D/g, '').slice(-10);
+}
+
+function escapeRegExp(value) {
+  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function rowValue(row, ...keys) {
+  const rowKeys = Object.keys(row || {});
+  for (const key of keys) {
+    const exact = rowKeys.find(k => k.trim().toLowerCase() === key.trim().toLowerCase());
+    if (exact && row[exact] !== undefined && row[exact] !== null && String(row[exact]).trim() !== '') {
+      return String(row[exact]).trim();
+    }
+  }
+  return '';
+}
+
+async function parseUploadedTable(file) {
+  const ext = path.extname(file.originalname || '').toLowerCase();
+  if (ext === '.xlsx' || ext === '.xls') {
+    const workbook = XLSX.read(file.buffer, { type: 'buffer', cellDates: false });
+    const sheetName = workbook.SheetNames[0];
+    if (!sheetName) return [];
+    return XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+  }
+
+  return await new Promise((resolve, reject) => {
+    const rows = [];
+    const stream = Readable.from(file.buffer.toString('utf-8'));
+    stream.pipe(csvParser())
+      .on('data', row => rows.push(row))
+      .on('end', () => resolve(rows))
+      .on('error', reject);
+  });
+}
+
+function withdrawal2026BaseQuery() {
+  return {
+    admissionDateParsed: {
+      $gte: new Date(Date.UTC(2026, 0, 1)),
+      $lt: new Date(Date.UTC(2027, 0, 1))
+    }
+  };
+}
+
+async function find2026StudentsByMobile(mobile) {
+  const digits = normalizeMobileNumber(mobile);
+  if (!digits) return [];
+  const probe = digits.length >= 6 ? digits.slice(-6) : digits;
+  const candidates = await Student.find({
+    ...withdrawal2026BaseQuery(),
+    mobile: { $regex: escapeRegExp(probe) }
+  }, listProjection).limit(50).lean();
+  return candidates.filter(student => normalizeMobileNumber(student.mobile) === digits);
+}
+
+app.get('/api/admin/withdrawals/search', auth, adminOnly, async (req, res) => {
+  try {
+    const mobile = String(req.query.mobile || '').trim();
+    const students = await find2026StudentsByMobile(mobile);
+    res.json({ students: students.map(s => mapDoc(s, 'admittedCenter', 'dateOfAdmission')) });
+  } catch (err) {
+    res.status(500).json({ error: 'Withdrawal search failed: ' + err.message });
+  }
+});
+
+app.post('/api/admin/withdrawals/mark', auth, adminOnly, async (req, res) => {
+  try {
+    const studentId = String(req.body?.studentId || '').trim();
+    const mobile = String(req.body?.mobile || '').trim();
+    let ids = [];
+
+    if (studentId && mongoose.Types.ObjectId.isValid(studentId)) {
+      const student = await Student.findOne({ _id: studentId, ...withdrawal2026BaseQuery() }, { _id: 1 }).lean();
+      if (student) ids = [student._id];
+    } else if (mobile) {
+      const students = await find2026StudentsByMobile(mobile);
+      ids = students.map(student => student._id);
+    }
+
+    if (!ids.length) return res.status(404).json({ error: 'No matching 2026 admitted student found.' });
+    const result = await Student.updateMany(
+      { _id: { $in: ids } },
+      { $set: { applicationStatus: 'Withdrawn' } }
+    );
+    res.json({ success: true, matched: ids.length, updated: result.modifiedCount || 0 });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not mark withdrawal: ' + err.message });
+  }
+});
+
+app.post('/api/admin/withdrawals/upload', auth, adminOnly, upload_mem.single('withdrawalFile'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
+    const rows = await parseUploadedTable(req.file);
+    const mobiles = [];
+    const skippedRows = [];
+
+    rows.forEach((row, index) => {
+      const mobile = rowValue(row, 'Mobile', 'Phone', 'Contact', 'Mobile Number', 'Mobile No', 'Phone Number');
+      const status = rowValue(row, 'Status', 'Application Status', 'Withdrawal Status', 'Withdraw Status');
+      const shouldWithdraw = status ? /withdr/i.test(status) : true;
+      const digits = normalizeMobileNumber(mobile);
+      if (shouldWithdraw && digits) mobiles.push(digits);
+      else skippedRows.push(index + 2);
+    });
+
+    const uniqueMobiles = [...new Set(mobiles)];
+    let matched = 0;
+    let updated = 0;
+    const notFound = [];
+
+    for (const mobile of uniqueMobiles) {
+      const students = await find2026StudentsByMobile(mobile);
+      if (!students.length) {
+        notFound.push(mobile);
+        continue;
+      }
+      const ids = students.map(student => student._id);
+      matched += ids.length;
+      const result = await Student.updateMany(
+        { _id: { $in: ids } },
+        { $set: { applicationStatus: 'Withdrawn' } }
+      );
+      updated += result.modifiedCount || 0;
+    }
+
+    res.json({
+      success: true,
+      rowsRead: rows.length,
+      mobileNumbersRead: uniqueMobiles.length,
+      matched,
+      updated,
+      notFound,
+      skippedRows
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Withdrawal upload failed: ' + err.message });
+  }
+});
 
 function courseReportCampusLabel(value) {
   const campus = String(value || 'ALL').toUpperCase();
@@ -2379,6 +2558,7 @@ async function getCourseAdmissionReportData({ startDate, endDate, campus }) {
 
   const match = { admissionDateParsed: { $gte: start, $lte: end } };
   if (campus !== 'ALL') addAndFilter(match, campusFilterQuery(campus, ['admittedCenter', 'campus']));
+  exclude2026WithdrawnAdmissions(match, 'admissionDateParsed', start, end);
   const grouped = await Student.aggregate([
     { $match: match },
     { $group: { _id: '$courseName', count: { $sum: 1 } } }
@@ -2482,14 +2662,6 @@ const comparisonCourseGroups = [
     label: 'B.Sc. NURSING',
     courses2026: ['B.Sc Nursing'],
     courses2025: ['B.Sc. NURSING']
-  },
-  {
-    label: 'BBA',
-    matcher: course => /\bbba\b/i.test(course)
-  },
-  {
-    label: 'BCA',
-    matcher: course => /\bbca\b/i.test(course)
   }
 ];
 
@@ -2521,6 +2693,7 @@ function countComparisonGroup(countsByCourse, group, year) {
 async function getComparisonCountsByCourse({ start, end, campus }) {
   const match = { admissionDateParsed: { $gte: start, $lte: end } };
   if (campus !== 'ALL') addAndFilter(match, campusFilterQuery(campus, ['admittedCenter', 'campus']));
+  exclude2026WithdrawnAdmissions(match, 'admissionDateParsed', start, end);
   const grouped = await Student.aggregate([
     { $match: match },
     { $group: { _id: '$courseName', count: { $sum: 1 } } }
@@ -2705,7 +2878,7 @@ app.get('/api/students', auth, dashboardOnly, featureOnly('dashboard'), async (r
     const [enqCount, regCount, admCount, campusList, courseList, yearList] = await Promise.all([
       Student.countDocuments({ enquiryDateParsed: dateRange, ...scopedModeQ }),
       Student.countDocuments({ registrationDateParsed: dateRange, ...scopedModeQ }),
-      Student.countDocuments({ admissionDateParsed: dateRange, ...scopedModeQ }),
+      Student.countDocuments(buildDateFilter('admissionDateParsed', start, end, { mode, accessCampus })),
       Promise.all([
         Student.distinct('enquiredCenter', scopedModeQ),
         Student.distinct('registeredCenter', scopedModeQ),

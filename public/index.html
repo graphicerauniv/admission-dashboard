@@ -659,6 +659,29 @@ tbody tr{transition:background .1s;}
         <div id="newReportPreviewWrap" style="display:none;margin-top:14px;"></div>
       </div>
     </div>
+
+    <div class="section-card admin-only" id="withdrawalManager" style="display:none;">
+      <div class="section-header">
+        <div class="section-title"><span class="icon" style="background:var(--danger-light);color:var(--danger-dark);">↩</span>2026 Withdrawal Manager</div>
+      </div>
+      <div class="section-body">
+        <p style="color:var(--text-muted);font-size:12px;margin-bottom:14px;">Mark 2026 admitted students as withdrawn. Withdrawn 2026 students are excluded from admission reports and counts.</p>
+        <div class="upload-group">
+          <label>Mobile Number</label>
+          <input type="text" id="withdrawalMobileSearch" placeholder="Enter mobile number">
+          <button class="btn-outline btn-sm" id="withdrawalSearchBtn" onclick="searchWithdrawalStudent()">Search</button>
+        </div>
+        <div id="withdrawalSearchResults" style="margin-top:12px;"></div>
+        <div style="height:1px;background:var(--border);margin:16px 0;"></div>
+        <div class="upload-group">
+          <label>Bulk Excel/CSV</label>
+          <input type="file" id="withdrawalUploadFile" accept=".xlsx,.xls,.csv">
+          <button class="btn-danger btn-sm" id="withdrawalUploadBtn" onclick="uploadWithdrawalFile()">Upload Withdrawals</button>
+        </div>
+        <small style="color:var(--text-muted);display:block;margin-top:8px;">Bulk file needs a Mobile column. If it has a Status column, only rows containing withdrawal/withdrawn are updated; without Status, every mobile in the file is marked withdrawn.</small>
+        <div id="withdrawalStatus" class="upload-status" style="margin-top:10px;"></div>
+      </div>
+    </div>
   </div>
 
   <div class="section-card admin-only" id="daywiseCompareSection" style="display:none;">
@@ -1079,6 +1102,13 @@ tbody tr{transition:background .1s;}
           <option value="regular" selected>Regular</option>
           <option value="online">Online</option>
         </select>
+      </div>
+
+      <!-- Withdrawal count -->
+      <div>
+        <div class="chip-group-label">Withdrawal</div>
+        <input type="number" id="reportWithdrawalCount" min="0" step="1" value="0" placeholder="Enter withdrawal count" oninput="clearReportMsg()" style="width:100%;padding:9px 12px;border:1.5px solid #334155;border-radius:8px;background:#0f172a;color:#e2e8f0;font-size:12px;font-weight:600;">
+        <div class="help-text">Manual number shown in the Withdrawal box under the main report table.</div>
       </div>
 
       <!-- To: emails -->
@@ -1549,9 +1579,7 @@ const newReportCourseGroups=[
   {label:'BMLT',courses2026:['BMLT']},
   {label:'BMRIT',courses2026:['BMRIT']},
   {label:'BPT',courses2026:['BPT']},
-  {label:'B.Sc. NURSING',courses2026:['B.Sc Nursing']},
-  {label:'BBA',matcher:course=>/\bbba\b/i.test(course)},
-  {label:'BCA',matcher:course=>/\bbca\b/i.test(course)}
+  {label:'B.Sc. NURSING',courses2026:['B.Sc Nursing']}
 ];
 
 const newReportOnly2026Groups=[
@@ -1659,18 +1687,15 @@ function renderNewReportTable(data){
   const onlyRows=data.only2026Rows||[];
   let html='<div class="new-report-panel">';
   html+='<div class="new-report-title">'+escapeHtml(data.title||'Comparison chart 2025 vs 2026')+'</div>';
-  html+='<div class="new-report-meta"><span>2026: uploaded file</span><span>2025: '+escapeHtml(data.comparisonStartDate)+' to '+escapeHtml(data.comparisonEndDate)+'</span><span>'+escapeHtml(data.campusLabel||'All Campuses')+'</span></div>';
   html+='<table class="new-report-table"><thead><tr><th>Course</th><th>2026</th><th>2025</th></tr></thead><tbody>';
   rows.forEach(row=>{
     html+='<tr><td class="course-col">'+escapeHtml(row.course)+'</td><td class="count-col">'+Number(row.count2026||0)+'</td><td class="count-col">'+Number(row.count2025||0)+'</td></tr>';
   });
-  html+='<tr class="total-row"><td>Total</td><td>'+Number(data.total2026||0)+'</td><td>'+Number(data.total2025||0)+'</td></tr>';
-  html+='<tr class="section-break"><td></td><td></td><td></td></tr>';
-  html+='<tr class="section-label"><td colspan="3">Only present in 2026</td></tr>';
+  html+='</tbody></table>';
+  html+='<table class="new-report-table" style="margin-top:16px;"><thead><tr><th>Course</th><th>2026</th></tr></thead><tbody>';
   onlyRows.forEach(row=>{
-    html+='<tr><td class="course-col">'+escapeHtml(row.course)+'</td><td class="count-col">'+Number(row.count2026||0)+'</td><td class="count-col">0</td></tr>';
+    html+='<tr><td class="course-col">'+escapeHtml(row.course)+'</td><td class="count-col">'+Number(row.count2026||0)+'</td></tr>';
   });
-  html+='<tr class="total-row"><td>Only 2026 Total</td><td>'+Number(data.only2026Total||0)+'</td><td>0</td></tr>';
   html+='</tbody></table></div>';
   document.getElementById('newReportPreviewWrap').innerHTML=html;
   document.getElementById('newReportPreviewWrap').style.display='block';
@@ -1715,17 +1740,11 @@ async function downloadNewReportExcel(){
     renderNewReportTable(data);
     const rows=[
       [data.title||'Comparison chart 2025 vs 2026'],
-      ['2026', 'Uploaded file', '2025', data.comparisonStartDate+' to '+data.comparisonEndDate],
-      ['Campus', data.campusLabel||'All Campuses'],
-      [],
       ['Course','2026','2025'],
       ...(data.rows||[]).map(row=>[row.course, Number(row.count2026||0), Number(row.count2025||0)]),
-      ['Total', Number(data.total2026||0), Number(data.total2025||0)],
       [],
-      ['Only present in 2026'],
-      ['Course','2026','2025'],
-      ...(data.only2026Rows||[]).map(row=>[row.course, Number(row.count2026||0), 0]),
-      ['Only 2026 Total', Number(data.only2026Total||0), 0]
+      ['Course','2026'],
+      ...(data.only2026Rows||[]).map(row=>[row.course, Number(row.count2026||0)])
     ];
     const wb=XLSX.utils.book_new();
     const ws=XLSX.utils.aoa_to_sheet(rows);
@@ -1734,6 +1753,94 @@ async function downloadNewReportExcel(){
     XLSX.writeFile(wb,'GEU_New_Report_2025_vs_2026_'+data.startDate+'_to_'+data.endDate+'.xlsx');
   }catch(e){
     const status=document.getElementById('newReportStatus');
+    status.textContent='✕ '+e.message;
+    status.style.color='var(--danger)';
+  }finally{ btn.disabled=false; }
+}
+
+function renderWithdrawalResults(students){
+  const wrap=document.getElementById('withdrawalSearchResults');
+  if(!students||!students.length){
+    wrap.innerHTML='<div class="no-data" style="padding:18px;">No matching 2026 admitted student found.</div>';
+    return;
+  }
+  let html='<div class="table-wrap" style="max-height:260px;"><table><thead><tr><th>Name</th><th>Mobile</th><th>Course</th><th>Status</th><th>Admission Date</th><th>Action</th></tr></thead><tbody>';
+  students.forEach(student=>{
+    html+='<tr>';
+    html+='<td>'+escapeHtml(student.name||'-')+'</td>';
+    html+='<td>'+escapeHtml(student.mobile||'-')+'</td>';
+    html+='<td>'+escapeHtml(student.course||'-')+'</td>';
+    html+='<td>'+escapeHtml(student.status||'-')+'</td>';
+    html+='<td>'+escapeHtml(student.dateStr||'-')+'</td>';
+    html+='<td><button class="btn-danger btn-sm" onclick="markWithdrawalStudent(\''+escapeHtml(student._id)+'\')">Mark Withdrawn</button></td>';
+    html+='</tr>';
+  });
+  html+='</tbody></table></div>';
+  wrap.innerHTML=html;
+}
+
+async function searchWithdrawalStudent(){
+  const mobile=document.getElementById('withdrawalMobileSearch').value.trim();
+  const status=document.getElementById('withdrawalStatus');
+  const btn=document.getElementById('withdrawalSearchBtn');
+  if(!mobile){ alert('Enter a mobile number.'); return; }
+  btn.disabled=true;
+  status.textContent='Searching 2026 admissions...';
+  status.style.color='var(--text-muted)';
+  try{
+    const r=await authFetch('/api/admin/withdrawals/search?mobile='+encodeURIComponent(mobile));
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Search failed');
+    renderWithdrawalResults(d.students||[]);
+    status.textContent='Found '+(d.students||[]).length+' matching student(s).';
+    status.style.color='var(--success-dark)';
+  }catch(e){
+    status.textContent='✕ '+e.message;
+    status.style.color='var(--danger)';
+  }finally{ btn.disabled=false; }
+}
+
+async function markWithdrawalStudent(studentId){
+  if(!confirm('Mark this 2026 admitted student as Withdrawn?')) return;
+  const status=document.getElementById('withdrawalStatus');
+  status.textContent='Updating withdrawal status...';
+  status.style.color='var(--text-muted)';
+  try{
+    const r=await authFetch('/api/admin/withdrawals/mark',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({studentId})
+    });
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Update failed');
+    status.textContent='✓ Marked withdrawn. Updated records: '+(d.updated||0)+'.';
+    status.style.color='var(--success-dark)';
+    searchWithdrawalStudent();
+  }catch(e){
+    status.textContent='✕ '+e.message;
+    status.style.color='var(--danger)';
+  }
+}
+
+async function uploadWithdrawalFile(){
+  const file=document.getElementById('withdrawalUploadFile').files[0];
+  const status=document.getElementById('withdrawalStatus');
+  const btn=document.getElementById('withdrawalUploadBtn');
+  if(!file){ alert('Select an Excel or CSV file.'); return; }
+  const formData=new FormData();
+  formData.append('withdrawalFile',file);
+  btn.disabled=true;
+  status.textContent='Uploading withdrawal list...';
+  status.style.color='var(--text-muted)';
+  try{
+    const r=await authFetch('/api/admin/withdrawals/upload',{method:'POST',body:formData});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Upload failed');
+    let msg='✓ Withdrawal upload complete. Rows read: '+d.rowsRead+', mobiles read: '+d.mobileNumbersRead+', matched records: '+d.matched+', updated: '+d.updated+'.';
+    if(d.notFound&&d.notFound.length) msg+=' Not found: '+d.notFound.slice(0,10).join(', ')+(d.notFound.length>10?' +' +(d.notFound.length-10)+' more':'')+'.';
+    status.textContent=msg;
+    status.style.color='var(--success-dark)';
+  }catch(e){
     status.textContent='✕ '+e.message;
     status.style.color='var(--danger)';
   }finally{ btn.disabled=false; }
@@ -2306,6 +2413,12 @@ function getSelectedCampuses(){
   return [...document.querySelectorAll('#campusChips .chip')].filter(c=>c.className.includes('selected-')).map(c=>c.dataset.campus);
 }
 
+function getReportWithdrawalCount(){
+  const el=document.getElementById('reportWithdrawalCount');
+  const value=parseInt(el&&el.value,10);
+  return Number.isFinite(value)&&value>0?value:0;
+}
+
 // ─── Tag input helpers ───
 function extractEmails(raw){
   if(!raw) return [];
@@ -2347,12 +2460,13 @@ async function persistReportSettingsSilent(){
   const campuses = getSelectedCampuses();
   const modeEl = document.getElementById('reportMode');
   const mode = (modeEl && modeEl.value === 'online') ? 'online' : 'regular';
+  const withdrawalCount=getReportWithdrawalCount();
 
   try{
     await authFetch('/api/email-settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ toEmails, ccEmails, years, campuses, mode })
+      body: JSON.stringify({ toEmails, ccEmails, years, campuses, mode, withdrawalCount })
     });
   }catch(e){
     // keep UI responsive; optional console log only
@@ -2439,6 +2553,8 @@ async function openReportModal(){
     if(modeEl){
       modeEl.value = (d.mode==='online') ? 'online' : 'regular';
     }
+    const withdrawalEl=document.getElementById('reportWithdrawalCount');
+    if(withdrawalEl) withdrawalEl.value = Number(d.withdrawalCount||0);
   }catch(e){}
 }
 
@@ -2453,6 +2569,7 @@ async function saveReportSettings(){
   const campuses = getSelectedCampuses();
   const modeEl=document.getElementById('reportMode');
   const mode = (modeEl && modeEl.value==='online') ? 'online' : 'regular';
+  const withdrawalCount=getReportWithdrawalCount();
   // Flush any half-typed emails
   const toInput=document.getElementById('toTagInput').value.trim();
   const ccInput=document.getElementById('ccTagInput').value.trim();
@@ -2463,7 +2580,7 @@ async function saveReportSettings(){
     const r=await authFetch('/api/email-settings',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ toEmails, ccEmails, years, campuses, mode })
+      body:JSON.stringify({ toEmails, ccEmails, years, campuses, mode, withdrawalCount })
     });
     const d=await r.json();
     if(d.success){
@@ -2480,6 +2597,7 @@ async function sendReport(){
   const campuses = getSelectedCampuses();
   const modeEl=document.getElementById('reportMode');
   const mode = (modeEl && modeEl.value==='online') ? 'online' : 'regular';
+  const withdrawalCount=getReportWithdrawalCount();
   // Flush typed emails
   const toInput=document.getElementById('toTagInput').value.trim();
   if(toInput) addEmailTokens('to', toInput, { clearInput:true });
@@ -2496,14 +2614,14 @@ async function sendReport(){
   await authFetch('/api/email-settings',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({ toEmails, ccEmails, years, campuses, mode })
+    body:JSON.stringify({ toEmails, ccEmails, years, campuses, mode, withdrawalCount })
   }).catch(()=>{});
 
   try{
     const r=await authFetch('/api/send-report',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ years, campuses, mode })
+      body:JSON.stringify({ years, campuses, mode, withdrawalCount })
     });
     const d=await r.json();
     if(d.success){
@@ -2521,13 +2639,14 @@ async function refreshPreview(){
   const campuses = getSelectedCampuses();
   const modeEl=document.getElementById('reportMode');
   const mode = (modeEl && modeEl.value==='online') ? 'online' : 'regular';
+  const withdrawalCount=getReportWithdrawalCount();
   if(years.length===0||campuses.length===0){ showReportMsg('Select at least 1 year and 1 campus before previewing.','error'); return; }
 
   const btn=document.querySelector('.btn-refresh-preview');
   btn.textContent='⏳ Loading...'; btn.disabled=true;
 
   try{
-    const r=await authFetch('/api/report-preview?years='+years.join(',')+'&campuses='+campuses.join(',')+'&mode='+encodeURIComponent(mode));
+    const r=await authFetch('/api/report-preview?years='+years.join(',')+'&campuses='+campuses.join(',')+'&mode='+encodeURIComponent(mode)+'&withdrawalCount='+encodeURIComponent(withdrawalCount));
     const d=await r.json();
     if(d.html){
       document.getElementById('previewPlaceholder').style.display='none';
