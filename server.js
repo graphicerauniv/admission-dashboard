@@ -2541,6 +2541,103 @@ function buildCourseAdmissionReportPdf({ startDate, endDate, campus, courses, to
   return Buffer.from(pdf, 'latin1');
 }
 
+function buildIntakeReportPdf({ rows }) {
+  const pageWidth = 595;
+  const pageHeight = 842;
+  const margin = 42;
+  const tableTop = 744;
+  const tableBottom = 54;
+  const rowLineHeight = 11;
+  const courseWidthChars = 50;
+  const pages = [];
+  let pageRows = [];
+  let usedHeight = 0;
+
+  const flushPage = () => {
+    pages.push(pageRows);
+    pageRows = [];
+    usedHeight = 0;
+  };
+
+  rows.forEach((row, index) => {
+    const lines = row.rowType === 'spacer' ? [''] : (String(row.course || '').trim() ? wrapPdfText(row.course, courseWidthChars) : ['']);
+    const rowHeight = row.rowType === 'spacer' ? 20 : Math.max(20, lines.length * rowLineHeight + 8);
+    if (pageRows.length && usedHeight + rowHeight > tableTop - tableBottom) flushPage();
+    pageRows.push({ ...row, index: index + 1, lines, rowHeight });
+    usedHeight += rowHeight;
+  });
+  if (pageRows.length || !pages.length) flushPage();
+
+  const contentStreams = pages.map((pageRows, pageIndex) => {
+    const commands = [];
+    commands.push('0 0 0 rg 0 0 595 842 re f');
+    commands.push('0.122 0.306 0.471 rg 42 776 511 18 re f');
+    commands.push('1 1 1 rg');
+    commands.push(pdfText('Course', 48, 781, 9, 'F2'));
+    commands.push(pdfText('Intake', 306, 781, 9, 'F2'));
+    commands.push(pdfText('2026', 377, 781, 9, 'F2'));
+    commands.push(pdfText('Diff', 441, 781, 9, 'F2'));
+    commands.push('0 0 0 rg');
+    commands.push(pdfText('Intake Report', margin, 810, 16, 'F2'));
+    commands.push(pdfText(`Generated on ${new Date().toISOString().slice(0, 10)} | Page ${pageIndex + 1} of ${pages.length}`, 352, 810, 8));
+
+    let y = tableTop;
+    pageRows.forEach(row => {
+      y -= row.rowHeight;
+      commands.push('0.16 0.16 0.16 rg 42 ' + y + ' 511 ' + row.rowHeight + ' re f');
+      commands.push('0.45 0.45 0.45 RG 42 ' + y + ' 511 ' + row.rowHeight + ' re S');
+      commands.push('1 1 1 rg');
+      if (row.rowType !== 'spacer') {
+        row.lines.forEach((line, lineIndex) => {
+          if (line) commands.push(pdfText(line, 48, y + row.rowHeight - 13 - (lineIndex * rowLineHeight), 8));
+        });
+        if (row.intake !== '') commands.push(pdfText(row.intake, 313, y + row.rowHeight - 13, 8));
+        if (row.count2026 !== '') commands.push(pdfText(row.count2026, 383, y + row.rowHeight - 13, 8));
+        if (row.rowType === 'summary' && row.diff > 0) commands.push('0 0.69 0.314 rg');
+        else if (row.rowType === 'summary' && row.diff < 0) commands.push('0.753 0 0 rg');
+        else commands.push('1 1 1 rg');
+        if (row.diff !== '') commands.push(pdfText(row.diff, 444, y + row.rowHeight - 13, 8, 'F2'));
+      }
+    });
+
+    return commands.join('\n');
+  });
+
+  const objects = [];
+  const addObject = value => {
+    objects.push(value);
+    return objects.length;
+  };
+  const catalogId = addObject('');
+  const pagesId = addObject('');
+  const fontId = addObject('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+  const boldFontId = addObject('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>');
+  const pageIds = [];
+
+  contentStreams.forEach(stream => {
+    const contentId = addObject(`<< /Length ${Buffer.byteLength(stream, 'latin1')} >>\nstream\n${stream}\nendstream`);
+    const pageId = addObject(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 ${fontId} 0 R /F2 ${boldFontId} 0 R >> >> /Contents ${contentId} 0 R >>`);
+    pageIds.push(pageId);
+  });
+
+  objects[catalogId - 1] = `<< /Type /Catalog /Pages ${pagesId} 0 R >>`;
+  objects[pagesId - 1] = `<< /Type /Pages /Kids [${pageIds.map(id => `${id} 0 R`).join(' ')}] /Count ${pageIds.length} >>`;
+
+  let pdf = '%PDF-1.4\n';
+  const offsets = [0];
+  objects.forEach((object, index) => {
+    offsets.push(Buffer.byteLength(pdf, 'latin1'));
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+  const xrefOffset = Buffer.byteLength(pdf, 'latin1');
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  offsets.slice(1).forEach(offset => {
+    pdf += `${String(offset).padStart(10, '0')} 00000 n \n`;
+  });
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root ${catalogId} 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  return Buffer.from(pdf, 'latin1');
+}
+
 async function getCourseAdmissionReportData({ startDate, endDate, campus }) {
   const start = parseISODateParam(startDate);
   const end = parseISODateParam(endDate, true);
@@ -2805,6 +2902,35 @@ app.get('/api/admin/course-admission-report.pdf', auth, adminOnly, async (req, r
   }
 });
 
+app.post('/api/admin/intake-report.pdf', auth, adminOnly, async (req, res) => {
+  try {
+    const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
+    if (!rows.length) return res.status(400).json({ error: 'No intake report rows found.' });
+
+    const cleanRows = rows.map(row => {
+      const course = String(row.course || '').trim();
+      const rowType = ['detail', 'summary', 'spacer'].includes(row.rowType) ? row.rowType : 'detail';
+      if (rowType === 'spacer') return { course: '', intake: '', count2026: '', diff: '', rowType };
+      const count2026 = row.count2026 === '' ? '' : Math.max(0, parseInt(row.count2026, 10) || 0);
+      const rowIntake = row.intake === '' ? '' : Math.max(0, parseInt(row.intake, 10) || 0);
+      const diff = row.diff === '' ? '' : parseInt(row.diff, 10) || 0;
+      return { course, intake: rowIntake, count2026, diff, rowType };
+    });
+
+    if (!cleanRows.length) return res.status(400).json({ error: 'No valid course rows found.' });
+    const pdf = buildIntakeReportPdf({ rows: cleanRows });
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="intake-report-${new Date().toISOString().slice(0, 10)}.pdf"`,
+      'Content-Length': pdf.length
+    });
+    res.send(pdf);
+  } catch (err) {
+    console.error('Intake PDF report error:', err);
+    res.status(500).json({ error: 'Could not create intake report: ' + err.message });
+  }
+});
+
 app.get('/api/admin/new-report', auth, adminOnly, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
@@ -2889,7 +3015,7 @@ app.get('/api/students', auth, dashboardOnly, featureOnly('dashboard'), async (r
         const codes = [...new Set(allRaw.map(normalizeCampus))].filter(Boolean);
         return codes.map(displayCampus).sort();
       }),
-      Student.distinct('courseName', scopedModeQ).then(courses => courses.filter(Boolean).sort((a, b) => a.localeCompare(b))),
+      Student.distinct('courseName', buildDateFilter('admissionDateParsed', start, end, { mode, accessCampus })).then(courses => courses.filter(Boolean).sort((a, b) => a.localeCompare(b))),
       Student.aggregate([{ $match: buildDateFilter('enquiryDateParsed', start, end, { mode, accessCampus }) }, { $project: { y: { $year: '$enquiryDateParsed' } } }, { $group: { _id: '$y' } }, { $sort: { _id: 1 } }]).then(async enqYears => {
         const regYears = await Student.aggregate([{ $match: buildDateFilter('registrationDateParsed', start, end, { mode, accessCampus }) }, { $project: { y: { $year: '$registrationDateParsed' } } }, { $group: { _id: '$y' } }]);
         const admYears = await Student.aggregate([{ $match: buildDateFilter('admissionDateParsed', start, end, { mode, accessCampus }) }, { $project: { y: { $year: '$admissionDateParsed' } } }, { $group: { _id: '$y' } }]);

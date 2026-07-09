@@ -660,6 +660,24 @@ tbody tr{transition:background .1s;}
       </div>
     </div>
 
+    <div class="section-card admin-only" id="intakeReport" style="display:none;">
+      <div class="section-header">
+        <div class="section-title"><span class="icon" style="background:var(--warning-light);color:var(--warning-dark);">📋</span>Intake Report</div>
+      </div>
+      <div class="section-body">
+        <p style="color:var(--text-muted);font-size:12px;margin-bottom:14px;">Upload a 2026 Excel/CSV file with Course Name and Count, or student detail rows with a course column. Intake values are fixed from the shared intake PDF.</p>
+        <div class="upload-group">
+          <label>2026 Excel/CSV</label>
+          <input type="file" id="intakeReportFile" accept=".xlsx,.xls,.csv" onchange="intakeReportData=null;document.getElementById('intakeReportPreviewWrap').style.display='none';">
+          <button class="btn-outline btn-sm" id="intakePreviewBtn" onclick="previewIntakeReport()">👀 Preview</button>
+          <button class="btn-purple btn-sm" id="intakeExcelBtn" onclick="downloadIntakeReportExcel()">⬇ Excel</button>
+          <button class="btn-success btn-sm" id="intakePdfBtn" onclick="downloadIntakeReportPdf()">⬇ PDF</button>
+        </div>
+        <div id="intakeReportStatus" class="upload-status" style="margin-top:10px;"></div>
+        <div id="intakeReportPreviewWrap" style="display:none;margin-top:14px;"></div>
+      </div>
+    </div>
+
     <div class="section-card admin-only" id="withdrawalManager" style="display:none;">
       <div class="section-header">
         <div class="section-title"><span class="icon" style="background:var(--danger-light);color:var(--danger-dark);">↩</span>2026 Withdrawal Manager</div>
@@ -1753,6 +1771,190 @@ async function downloadNewReportExcel(){
     XLSX.writeFile(wb,'GEU_New_Report_2025_vs_2026_'+data.startDate+'_to_'+data.endDate+'.xlsx');
   }catch(e){
     const status=document.getElementById('newReportStatus');
+    status.textContent='✕ '+e.message;
+    status.style.color='var(--danger)';
+  }finally{ btn.disabled=false; }
+}
+
+let intakeReportData=null;
+
+const intakeReportSections=[
+  {intake:720,details:[['B.Tech CSE'],['B.Tech CSE (AI & ML)'],['B.Tech CSE (Hons.) with specialization in Generative AI'],['B.Tech CSE (Cybersecurity and AI & ML)']]},
+  {intake:120,details:[['B.Tech CSE (IOT with AI & ML)'],['B.Tech CSE IOT']]},
+  {intake:360,details:[['B.Tech CSE AI & ML','B.Tech CSE (Hons.) with specialization in AI & ML']]},
+  {intake:180,details:[['B.Tech CSE AI & DS','B.Tech CSE (Hons.) with specialization in AI & DS']]},
+  {intake:60,details:[['B.Tech CSE Regional Language Quota'],['B.Tech CSE (AI & ML Through RLQ)']]},
+  {intake:60,details:[['B.Tech CSE Cyber Security','B.Tech CSE (Hons.) with specialization in Cyber Security']]},
+  {intake:360,details:[['MBA'],['MBA IMPACT'],['MBA in Hospital Administration'],['MBA with specialization in Business Analytics'],['MBA with specialization in Finance'],['MBA with specialization in Human Resource'],['MBA with specialization in Marketing'],['MBA with specialization in Digital Marketing'],['MBA with specialization in Logistics and Supply Chain Management'],['MBA with specialization in Banking & Finance'],['MBA with Aviation Management'],['MBA with specialization in Sports Management'],['MBA with specialization in Branding & Advertising'],['MBA with specialization in International Business']]},
+  {intake:60,details:[['MBA AI & DS']]},
+  {intake:300,details:[['MCA'],['MCA AI & DS','MCA Artificial Intelligence & Data Science']]},
+  {intake:780,details:[['BBA'],['BBA with specialization in AI & DS'],['BBA with specialization in E-Commerce and Digital Marketing'],['BBA with Business Analytics'],['BBA International Finance and Accounting with ACCA'],['BBA with Business Analytics (Industry Partner Grant Thornton)'],['BBA (Hons.)'],['BBA (Hons.) with specialization in AI & DS'],['BBA with specialization in Entrepreneurship'],['BBA with specialization in Aviation Management'],['BBA (Hons.) with specialization in E-Commerce and Digital Marketing'],['BBA (Hons.) International Finance and Accounting with ACCA'],['BBA with Specialization in Financial Technology (FinTech)'],['BBA (Hons.) with specialization in Entrepreneurship'],['BBA with specialization in Hospital Administration'],['BBA (Hons.) with specialization in Aviation Management'],['BBA (Hons.) with specialization in Hospital Administration']]},
+  {intake:900,details:[['BCA (Hons.) AI & DS'],['BCA'],['BCA AI and DS'],['BCA Cyber Security'],['BCA (Hons.) Cyber Security'],['BCA (Hons.)'],['BCA Industry Integrated']]},
+  {intake:60,details:[['B.Tech ME'],['B.Tech ME (Hons.) with specialization in Automobile'],['B.Tech ME (Hons.) with specialization in Robotics & Automation']]},
+  {intake:90,details:[['B.Tech ECE'],['B.Tech ECE with optional specialization in Embedded Sytems and Robotics (ESR)'],['B.Tech ECE (Working Professionals)'],['B.Tech ECE with optional specialization in Internet of Things (IoT)']]},
+  {intake:30,details:[['B.Tech ECE (VLSI Design and Technology)']]},
+  {intake:15,details:[['M.Des User Experience & Interaction Design'],['M.Des Graphic & Visual Communication Design'],['M.Des']]},
+  {intake:60,details:[['B.Des Animation & Game Design'],['B.Des User Experience & Interaction Design'],['B.Des Industrial Product Design'],['B.Des Graphic & Visual Communication Design'],['B.Des Interior and Spatial Experience Design'],['B.Design in Interior and Spatial Design']]},
+  {intake:30,details:[['B.Tech Electrical & Computer Engineering']]},
+  {intake:30,details:[['B.Tech Civil Engineering'],['B.Tech Civil Engineering (Working Professionals)'],['B.Tech Civil Engineering with specialization in Construction Management'],['B.Tech Civil Engineering with specialization in GIS & Remote Sensing']]},
+  {intake:30,details:[['B.Tech Aerospace Engineering'],['B.Tech Aerospace Engineering with specialization in Space Technology']]},
+  {intake:100,details:[['B.Sc Nursing','B.Sc. NURSING']]},
+  {intake:150,details:[['B.Tech Biotechnology']]},
+  {intake:18,details:[['M.Tech Biotechnology']]},
+  {intake:18,details:[['M.Tech Structural Engineering'],['M.Tech Structural Engineering (Working Professionals)']]},
+  {intake:60,details:[['M.Tech CSE']]},
+  {intake:18,details:[['M.Tech Electric Vehicle Technology']]}
+];
+
+const intakeAliasMap=new Map();
+intakeReportSections.forEach((section,sectionIndex)=>{
+  section.details.forEach((aliases,detailIndex)=>{
+    const label=aliases[0];
+    aliases.forEach(alias=>intakeAliasMap.set(normalizeNewReportCourse(alias),{sectionIndex,detailIndex,label}));
+  });
+});
+
+function getIntakeReportParams(){
+  const file=document.getElementById('intakeReportFile').files[0];
+  if(!file){ alert('Please upload an Excel or CSV file.'); return null; }
+  return { file };
+}
+
+async function buildIntakeReportData(){
+  const p=getIntakeReportParams();
+  if(!p) return null;
+  const status=document.getElementById('intakeReportStatus');
+  status.textContent='Reading intake report file...';
+  status.style.color='var(--text-muted)';
+  const workbook=await readAsWorkbook(p.file);
+  const sheet=workbook.Sheets[workbook.SheetNames[0]];
+  const rows=XLSX.utils.sheet_to_json(sheet,{defval:''});
+  const courseColumn=findNewReportCourseColumn(rows);
+  if(!courseColumn) throw new Error('Could not find a course column. Use Course Name, Course, Program, or Program Name.');
+  const countColumn=findNewReportCountColumn(rows);
+  const detailCounts=new Map();
+  const unknownCounts=new Map();
+  rows.forEach(row=>{
+    const rawCourse=String(row[courseColumn]||'').trim();
+    if(!rawCourse) return;
+    const count=countColumn?parseNewReportCount(row[countColumn]):1;
+    const mapped=intakeAliasMap.get(normalizeNewReportCourse(rawCourse));
+    if(mapped){
+      const key=mapped.sectionIndex+'-'+mapped.detailIndex;
+      detailCounts.set(key,(detailCounts.get(key)||0)+count);
+    }else{
+      unknownCounts.set(rawCourse,(unknownCounts.get(rawCourse)||0)+count);
+    }
+  });
+  const reportRows=[];
+  intakeReportSections.forEach((section,sectionIndex)=>{
+    let sectionTotal=0;
+    section.details.forEach((aliases,detailIndex)=>{
+      const key=sectionIndex+'-'+detailIndex;
+      const count2026=Number(detailCounts.get(key)||0);
+      sectionTotal+=count2026;
+      reportRows.push({course:aliases[0],intake:'',count2026,diff:'',rowType:'detail'});
+    });
+    reportRows.push({course:'',intake:section.intake,count2026:sectionTotal,diff:section.intake-sectionTotal,rowType:'summary'});
+    reportRows.push({course:'',intake:'',count2026:'',diff:'',rowType:'spacer'});
+  });
+  [...unknownCounts.entries()].forEach(([course,count2026])=>{
+    reportRows.push({course,intake:0,count2026,diff:-Number(count2026||0),rowType:'summary'});
+  });
+  intakeReportData={ rows:reportRows, sourceRows:rows.length, courseColumn, countColumn };
+  status.textContent='✓ Intake report ready. Rows read: '+rows.length+' | Course column: '+courseColumn+(countColumn?' | Count column: '+countColumn:' | Count column: row count');
+  status.style.color='var(--success-dark)';
+  return intakeReportData;
+}
+
+function renderIntakeReportTable(data){
+  const rows=data.rows||[];
+  let html='<div class="new-report-panel">';
+  html+='<div class="new-report-title">Intake Report</div>';
+  html+='<table class="new-report-table"><thead><tr><th>Course</th><th>Intake</th><th>2026</th><th>Diff</th></tr></thead><tbody>';
+  rows.forEach(row=>{
+    if(row.rowType==='spacer'){
+      html+='<tr><td colspan="4" style="height:18px;background:#fff;"></td></tr>';
+      return;
+    }
+    const isSummary=row.rowType==='summary';
+    const color=isSummary&&row.diff>0?'#059669':isSummary&&row.diff<0?'#dc2626':'#111';
+    const weight=isSummary?'800':'600';
+    html+='<tr><td class="course-col" style="font-weight:'+weight+';">'+escapeHtml(row.course)+'</td><td class="count-col" style="font-weight:'+weight+';">'+(row.intake===''?'':row.intake)+'</td><td class="count-col" style="font-weight:'+weight+';">'+(row.count2026===''?'':row.count2026)+'</td><td class="count-col" style="color:'+color+';font-weight:'+weight+';">'+(row.diff===''?'':row.diff)+'</td></tr>';
+  });
+  html+='</tbody></table></div>';
+  document.getElementById('intakeReportPreviewWrap').innerHTML=html;
+  document.getElementById('intakeReportPreviewWrap').style.display='block';
+}
+
+async function previewIntakeReport(){
+  const btn=document.getElementById('intakePreviewBtn');
+  btn.disabled=true;
+  try{
+    const data=await buildIntakeReportData();
+    if(data) renderIntakeReportTable(data);
+  }catch(e){
+    const status=document.getElementById('intakeReportStatus');
+    status.textContent='✕ '+e.message;
+    status.style.color='var(--danger)';
+  }finally{ btn.disabled=false; }
+}
+
+async function ensureIntakeReportData(){
+  if(intakeReportData) return intakeReportData;
+  return await buildIntakeReportData();
+}
+
+async function downloadIntakeReportExcel(){
+  const btn=document.getElementById('intakeExcelBtn');
+  btn.disabled=true;
+  try{
+    const data=await ensureIntakeReportData();
+    if(!data) return;
+    renderIntakeReportTable(data);
+    const rows=[
+      ['Course','Intake','2026','Diff'],
+      ...(data.rows||[]).map(row=>row.rowType==='spacer'?['','','','']:[row.course,row.intake,row.count2026,row.diff])
+    ];
+    const wb=XLSX.utils.book_new();
+    const ws=XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols']=[{wch:58},{wch:12},{wch:12},{wch:12}];
+    XLSX.utils.book_append_sheet(wb,ws,'Intake Report');
+    XLSX.writeFile(wb,'GEU_Intake_Report_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  }catch(e){
+    const status=document.getElementById('intakeReportStatus');
+    status.textContent='✕ '+e.message;
+    status.style.color='var(--danger)';
+  }finally{ btn.disabled=false; }
+}
+
+async function downloadIntakeReportPdf(){
+  const btn=document.getElementById('intakePdfBtn');
+  btn.disabled=true;
+  try{
+    const data=await ensureIntakeReportData();
+    if(!data) return;
+    renderIntakeReportTable(data);
+    const r=await authFetch('/api/admin/intake-report.pdf',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({rows:data.rows})
+    });
+    if(!r.ok){
+      const d=await r.json().catch(()=>({}));
+      throw new Error(d.error||'Could not create PDF');
+    }
+    const blob=await r.blob();
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;
+    a.download='intake-report-'+new Date().toISOString().slice(0,10)+'.pdf';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }catch(e){
+    const status=document.getElementById('intakeReportStatus');
     status.textContent='✕ '+e.message;
     status.style.color='var(--danger)';
   }finally{ btn.disabled=false; }
